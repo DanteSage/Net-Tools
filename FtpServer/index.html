@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>FTP 服务器</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #10121e);
+            --text: var(--text-primary, #ffffff);
+            --text-muted: var(--text-muted, #8892b0);
+            --text-sec: var(--text-secondary, #cbd5e1);
+            --border-color: var(--border-color, rgba(255, 255, 255, 0.08));
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.04));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.08));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.12));
+            --result-bg: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #10121e);
+            --danger: var(--danger-color, #ef4444);
+            --danger-hover: #dc2626;
+            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+            --glass-blur: blur(16px);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --success: #10b981;
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f8fafc);
+            --text: var(--text-primary, #0f172a);
+            --text-muted: var(--text-muted, #64748b);
+            --text-sec: var(--text-secondary, #334155);
+            --border-color: var(--border-color, rgba(0, 0, 0, 0.08));
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, #cbd5e1);
+            --result-bg: var(--bg-secondary, #f1f5f9);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #ffffff);
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --success: #059669;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Frameless Titlebar dragging */
+        .window-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            padding: 0 16px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            -webkit-app-region: drag;
+            flex-shrink: 0;
+        }
+
+        .window-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .window-controls-placeholder {
+            width: 138px;
+            flex-shrink: 0;
+        }
+
+        /* Content spacing */
+        .app-content {
+            flex: 1;
+            min-height: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Config Grid Forms */
+        .config-section {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 20px;
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1.2fr;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .form-row.two-cols {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .form-row.directory-row {
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+        }
+
+        .form-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-sec);
+            white-space: nowrap;
+            min-width: 70px;
+        }
+
+        .required-star {
+            color: var(--danger);
+            margin-right: 3px;
+            font-weight: bold;
+        }
+
+        .form-input-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+
+        .form-control {
+            width: 100%;
+            height: 38px;
+            padding: 0 12px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+
+        .form-control:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        select.form-control {
+            cursor: pointer;
+            padding-right: 24px;
+        }
+
+        /* Logging Console */
+        .log-section {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-sec);
+        }
+
+        .log-console {
+            flex: 1;
+            min-height: 0;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.8rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-sec);
+        }
+
+        .log-line {
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            margin-right: 8px;
+        }
+
+        .log-info {
+            color: var(--text-sec);
+        }
+
+        .log-cmd {
+            color: var(--primary);
+        }
+
+        .log-success {
+            color: var(--success);
+        }
+
+        .log-err {
+            color: var(--danger);
+        }
+
+        /* Footer buttons control */
+        .action-footer {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            padding-top: 8px;
+            flex-shrink: 0;
+        }
+
+        .btn {
+            height: 38px;
+            padding: 0 28px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            color: var(--text-sec);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
+            color: var(--text);
+        }
+
+        :root.light-theme .btn-secondary {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+
+        :root.light-theme .btn-secondary:hover:not(:disabled) {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Toasts style */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1a1d30;
+            border: 1px solid var(--border-color);
+            padding: 10px 20px;
+            border-radius: 6px;
+            color: #ffffff;
+            font-size: 0.85rem;
+            box-shadow: var(--shadow);
+            transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 9999;
+            pointer-events: none;
+            backdrop-filter: var(--glass-blur);
+        }
+        :root.light-theme .toast {
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.success {
+            border-color: var(--success);
+            background: #064e3b;
+            color: #a7f3d0;
+        }
+        :root.light-theme .toast.success {
+            background: #ecfdf5;
+            color: #065f46;
+            border-color: #10b981;
+        }
+        .toast.error {
+            border-color: var(--danger);
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+        :root.light-theme .toast.error {
+            background: #fef2f2;
+            color: #991b1b;
+            border-color: #ef4444;
+        }
+
+        /* Scrollbars styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Frameless Window Titlebar Header -->
+    <div class="window-header">
+        <div class="window-title">FTP服务器</div>
+        <div class="window-controls-placeholder"></div>
+    </div>
+
+    <div class="app-content">
+        <!-- Configuration Card Panel -->
+        <div class="config-section">
+            <!-- Row 1: Timeout, Port, Address -->
+            <div class="form-row">
+                <div class="form-group">
+                    <span class="form-label"><span class="required-star">*</span>超时时间</span>
+                    <div class="form-input-wrapper">
+                        <input type="number" id="server-timeout" class="form-control" placeholder="单位为秒" value="300" min="5">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <span class="form-label"><span class="required-star">*</span>端口</span>
+                    <div class="form-input-wrapper">
+                        <input type="number" id="server-port" class="form-control" placeholder="请输入端口号" value="21" min="1" max="65535">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <span class="form-label">服务器地址</span>
+                    <div class="form-input-wrapper">
+                        <select id="server-ip" class="form-control">
+                            <!-- IP interface options loaded dynamically -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: Username, Password -->
+            <div class="form-row two-cols">
+                <div class="form-group">
+                    <span class="form-label"><span class="required-star">*</span>用户名</span>
+                    <div class="form-input-wrapper">
+                        <input type="text" id="server-username" class="form-control" placeholder="请输入用户名" value="anonymous">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <span class="form-label"><span class="required-star">*</span>密码</span>
+                    <div class="form-input-wrapper">
+                        <input type="password" id="server-password" class="form-control" placeholder="请输入密码">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 3: Root share directory -->
+            <div class="form-row directory-row">
+                <div class="form-group">
+                    <span class="form-label"><span class="required-star">*</span>目录</span>
+                    <div class="form-input-wrapper">
+                        <input type="text" id="server-dir" class="form-control" placeholder="请选择用户主目录" readonly>
+                    </div>
+                </div>
+                <button id="btn-browse" class="btn btn-primary">浏览</button>
+            </div>
+        </div>
+
+        <!-- Logging Console Area -->
+        <div class="log-section">
+            <span class="section-title">日志信息</span>
+            <div id="log-console" class="log-console"></div>
+        </div>
+
+        <!-- Footer Control Buttons -->
+        <div class="action-footer">
+            <button id="btn-start" class="btn btn-primary">开始</button>
+            <button id="btn-stop" class="btn btn-secondary" disabled>停止</button>
+        </div>
+    </div>
+
+    <!-- Feedback Toast -->
+    <div id="toast" class="toast">提示信息</div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const os = require('os');
+        const fs = require('fs');
+
+        // Form elements
+        const timeoutInput = document.getElementById('server-timeout');
+        const portInput = document.getElementById('server-port');
+        const ipSelect = document.getElementById('server-ip');
+        const userInput = document.getElementById('server-username');
+        const passInput = document.getElementById('server-password');
+        const dirInput = document.getElementById('server-dir');
+
+        const btnBrowse = document.getElementById('btn-browse');
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const logConsole = document.getElementById('log-console');
+
+        // Initial default directory setting (Home directory)
+        const defaultDir = os.homedir();
+        dirInput.value = defaultDir;
+
+        // Auto populate IP Interfaces
+        function initNetworkInterfaces() {
+            const interfaces = os.networkInterfaces();
+            ipSelect.innerHTML = '';
+
+            // Listen on all addresses by default
+            const optAll = document.createElement('option');
+            optAll.value = '0.0.0.0';
+            optAll.textContent = '0.0.0.0 (所有本地网卡)';
+            ipSelect.appendChild(optAll);
+
+            for (const name of Object.keys(interfaces)) {
+                for (const netInfo of interfaces[name]) {
+                    // Only IPv4
+                    if (netInfo.family === 'IPv4') {
+                        const opt = document.createElement('option');
+                        opt.value = netInfo.address;
+                        opt.textContent = `${netInfo.address} - ${name}`;
+                        ipSelect.appendChild(opt);
+                    }
+                }
+            }
+        }
+
+        // Toasts alert
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            if (type === 'error') {
+                toast.classList.add('error');
+            } else if (type === 'success') {
+                toast.classList.add('success');
+            }
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Log Console helper
+        function appendLog(text) {
+            const line = document.createElement('div');
+            line.className = 'log-line';
+
+            const now = new Date().toLocaleTimeString();
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-time';
+            timeSpan.textContent = `[${now}]`;
+            line.appendChild(timeSpan);
+
+            const contentSpan = document.createElement('span');
+            
+            // Format log lines beautifully
+            if (text.includes('服务器已启动') || text.includes('服务端已成功启动')) {
+                contentSpan.className = 'log-success';
+            } else if (text.includes('服务端已完全关闭') || text.includes('服务器已关闭')) {
+                contentSpan.className = 'log-info';
+            } else if (text.includes('错误') || text.includes('异常') || text.includes('失败')) {
+                contentSpan.className = 'log-err';
+            } else if (text.includes('>')) {
+                contentSpan.className = 'log-cmd';
+            } else {
+                contentSpan.className = 'log-info';
+            }
+
+            contentSpan.textContent = text;
+            line.appendChild(contentSpan);
+
+            logConsole.appendChild(line);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // Select directory dialog trigger
+        btnBrowse.addEventListener('click', async () => {
+            const chosenDir = await ipcRenderer.invoke('ftpServer:selectDirectory');
+            if (chosenDir) {
+                dirInput.value = chosenDir;
+            }
+        });
+
+        // Set inputs disabled state
+        function setInputsDisabled(disabled) {
+            timeoutInput.disabled = disabled;
+            portInput.disabled = disabled;
+            ipSelect.disabled = disabled;
+            userInput.disabled = disabled;
+            passInput.disabled = disabled;
+            btnBrowse.disabled = disabled;
+        }
+
+        // Start FTP Server
+        btnStart.addEventListener('click', async () => {
+            const timeoutVal = parseInt(timeoutInput.value.trim());
+            const portVal = parseInt(portInput.value.trim());
+            const userVal = userInput.value.trim();
+            const passVal = passInput.value;
+            const dirVal = dirInput.value.trim();
+
+            // Field validations
+            if (isNaN(timeoutVal) || timeoutVal < 5) {
+                showToast('超时时间必须是大于等于 5 的有效数字', 'error');
+                return;
+            }
+            if (isNaN(portVal) || portVal < 1 || portVal > 65535) {
+                showToast('端口号必须在 1 至 65535 之间', 'error');
+                return;
+            }
+            if (!userVal) {
+                showToast('用户名不能为空', 'error');
+                return;
+            }
+            if (!passVal) {
+                showToast('密码不能为空', 'error');
+                return;
+            }
+            if (!dirVal) {
+                showToast('主目录路径不能为空', 'error');
+                return;
+            }
+            if (!fs.existsSync(dirVal)) {
+                showToast('所选主目录路径在本地盘符中不存在', 'error');
+                return;
+            }
+
+            // Disable UI, set loading
+            btnStart.disabled = true;
+            btnStart.textContent = '启动中...';
+
+            const config = {
+                timeout: timeoutVal,
+                port: portVal,
+                host: ipSelect.value,
+                username: userVal,
+                password: passVal,
+                rootDirectory: dirVal
+            };
+
+            const res = await ipcRenderer.invoke('ftpServer:start', config);
+            if (res.success) {
+                showToast('FTP 服务器已成功启动', 'success');
+                setInputsDisabled(true);
+                btnStart.textContent = '运行中';
+                btnStart.disabled = true;
+                btnStop.disabled = false;
+            } else {
+                showToast('服务器启动失败: ' + res.error, 'error');
+                btnStart.disabled = false;
+                btnStart.textContent = '开始';
+                btnStop.disabled = true;
+            }
+        });
+
+        // Stop FTP Server
+        btnStop.addEventListener('click', async () => {
+            btnStop.disabled = true;
+            btnStop.textContent = '停止中...';
+
+            const res = await ipcRenderer.invoke('ftpServer:stop');
+            if (res.success) {
+                showToast('FTP 服务器已停止', 'success');
+                setInputsDisabled(false);
+                btnStart.disabled = false;
+                btnStart.textContent = '开始';
+                btnStop.textContent = '停止';
+                btnStop.disabled = true;
+            } else {
+                showToast('关闭服务器异常: ' + res.error, 'error');
+                btnStop.disabled = false;
+                btnStop.textContent = '停止';
+            }
+        });
+
+        // Background logging receiver
+        ipcRenderer.on('ftpServer:log', (event, message) => {
+            appendLog(message);
+        });
+
+        // IPC Theme changed sync
+        function applyTheme(theme) {
+            if (!theme) return;
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+        
+        // Initial load sync
+        const _qs = new URLSearchParams(location.search);
+        const _qsMode = _qs.get('mode');
+        const _qsTheme = _qs.get('theme');
+        if (_qsMode || _qsTheme) {
+            applyTheme({ mode: _qsMode, key: _qsTheme });
+        } else {
+            ipcRenderer.invoke('theme:get').then(theme => {
+                applyTheme(theme);
+            }).catch(() => {});
+        }
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+
+        // Initialize Page
+        document.addEventListener('DOMContentLoaded', () => {
+            initNetworkInterfaces();
+            appendLog('FTP 服务端就绪。请配置共享选项并点击 [开始] 启动服务。');
+        });
+    </script>
+</body>
+</html>

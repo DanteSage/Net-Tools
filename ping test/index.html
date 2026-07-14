@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Ping 测试工具</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg-gradient-start: var(--bg-primary, #1a1a2e);
+            --bg-gradient-end: var(--bg-secondary, #16213e);
+            --text-color: var(--text-primary, #fff);
+            --text-muted: var(--text-muted, #888);
+            --text-secondary: var(--text-secondary, #aaa);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.08));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.12));
+            --input-bg: var(--bg-tertiary, rgba(0, 0, 0, 0.3));
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.2));
+            --btn-secondary-bg: rgba(255, 255, 255, 0.1);
+            --btn-secondary-border: var(--border-light, rgba(255, 255, 255, 0.2));
+            --item-border: var(--border-color, rgba(255, 255, 255, 0.06));
+            --item-hover: rgba(255, 255, 255, 0.05);
+            --scrollbar-track: rgba(255, 255, 255, 0.05);
+            --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+            --stat-bg: var(--bg-tertiary, rgba(255, 255, 255, 0.05));
+            --spinner-border: rgba(255, 255, 255, 0.3);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+        }
+        
+        :root.light-theme {
+            --bg-gradient-start: var(--bg-primary, #f5f7fa);
+            --bg-gradient-end: var(--bg-secondary, #e4e8ed);
+            --text-color: var(--text-primary, #1a1a2e);
+            --text-muted: var(--text-muted, #666);
+            --text-secondary: var(--text-secondary, #555);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.9));
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.1));
+            --input-bg: var(--bg-primary, rgba(255, 255, 255, 0.9));
+            --input-border: var(--border-light, rgba(0, 0, 0, 0.15));
+            --btn-secondary-bg: rgba(0, 0, 0, 0.05);
+            --btn-secondary-border: var(--border-light, rgba(0, 0, 0, 0.15));
+            --item-border: var(--border-color, rgba(0, 0, 0, 0.06));
+            --item-hover: rgba(0, 0, 0, 0.03);
+            --scrollbar-track: rgba(0, 0, 0, 0.05);
+            --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+            --stat-bg: var(--bg-tertiary, rgba(0, 0, 0, 0.03));
+            --spinner-border: rgba(0, 0, 0, 0.2);
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-gradient-start);
+            min-height: 100vh;
+            color: var(--text-color);
+            padding: 20px;
+            user-select: none;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        
+        :root.light-theme .card {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-title {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .form-group {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text-color);
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: #00d4ff;
+        }
+
+        .form-group input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .preset-btns {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .preset-btn {
+            padding: 5px 10px;
+            font-size: 0.75rem;
+            background: rgba(0, 212, 255, 0.15);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 5px;
+            color: #00d4ff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .preset-btn:hover {
+            background: rgba(0, 212, 255, 0.25);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            color: #fff;
+            flex: 1;
+        }
+
+        .btn-secondary {
+            background: var(--btn-secondary-bg);
+            color: var(--text-color);
+            border: 1px solid var(--btn-secondary-border);
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.75rem;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+
+        .btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-card {
+            background: var(--stat-bg);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .stat-value.success { color: #00ff88; }
+        .stat-value.fail { color: #ff4757; }
+        .stat-value.avg { color: #00d4ff; }
+        .stat-value.loss { color: #ffa502; }
+        .stat-value.min { color: #2ed573; }
+        .stat-value.max { color: #ff6b6b; }
+        .stat-value.jitter { color: #a55eea; }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        /* 结果列表 */
+        .results-section {
+            display: none;
+        }
+
+        .results-section.show {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .results-scroll {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .results-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .results-scroll::-webkit-scrollbar-track {
+            background: var(--scrollbar-track);
+        }
+
+        .results-scroll::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 3px;
+        }
+
+        .ping-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--item-border);
+            font-size: 0.8rem;
+        }
+
+        .ping-item:last-child {
+            border-bottom: none;
+        }
+
+        .ping-seq {
+            width: 45px;
+            color: var(--text-muted);
+        }
+
+        .ping-host {
+            flex: 1;
+            color: var(--text-secondary);
+        }
+
+        .ping-time {
+            width: 80px;
+            text-align: right;
+            font-weight: 500;
+        }
+
+        .ping-time.success { color: #00ff88; }
+        .ping-time.timeout { color: #ff4757; }
+
+        .ping-status {
+            width: 60px;
+            text-align: right;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+
+        .status-dot.success { background: #00ff88; }
+        .status-dot.timeout { background: #ff4757; }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--spinner-border);
+            border-top-color: var(--text-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .empty-result {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        
+        /* 波形图 */
+        .chart-container {
+            margin-bottom: 15px;
+            background: var(--stat-bg);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .chart-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        .chart-legend {
+            display: flex;
+            gap: 12px;
+            font-size: 0.7rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-muted);
+        }
+        
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        .legend-dot.latency { background: #00d4ff; }
+        .legend-dot.avg { background: #ffa502; }
+        .legend-dot.timeout { background: #ff4757; }
+        
+        #pingChart {
+            width: 100%;
+            height: 120px;
+            display: block;
+        }
+
+        /* 历史记录 */
+        .history-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--item-border);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .history-item:hover {
+            background: var(--item-hover);
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-host {
+            flex: 1;
+            color: var(--text-color);
+        }
+
+        .history-stats {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .history-time {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            margin-left: 10px;
+        }
+        
+        /* 主题切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text-color);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            z-index: 100;
+        }
+        
+        .theme-toggle:hover {
+            transform: scale(1.1);
+        }
+        
+        .theme-toggle svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+        
+        .theme-toggle .icon-sun { display: none; }
+        .theme-toggle .icon-moon { display: block; }
+        
+        :root.light-theme .theme-toggle .icon-sun { display: block; }
+        :root.light-theme .theme-toggle .icon-moon { display: none; }
+
+        /* ==================== 风格简化覆盖 ==================== */
+        .theme-toggle { display: none !important; }
+        body { padding-top: 48px !important; }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg-gradient-start);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+        .btn-primary {
+            background: #2563eb !important;
+            box-shadow: none !important;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #1d4ed8 !important;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" id="themeToggle" title="切换主题">
+        <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3" stroke="currentColor" stroke-width="2"/><line x1="12" y1="21" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" stroke-width="2"/><line x1="1" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2"/><line x1="21" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="currentColor" stroke-width="2"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="currentColor" stroke-width="2"/></svg>
+    </button>
+    <div class="container">
+        <!-- 配置 -->
+        <div class="card">
+            <div class="card-title">测试配置</div>
+            
+            <div class="preset-btns">
+                <button class="preset-btn" data-host="223.5.5.5">阿里DNS</button>
+                <button class="preset-btn" data-host="119.29.29.29">腾讯DNS</button>
+                <button class="preset-btn" data-host="114.114.114.114">114DNS</button>
+                <button class="preset-btn" data-host="8.8.8.8">Google DNS</button>
+                <button class="preset-btn" data-host="baidu.com">百度</button>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" style="flex: 2;">
+                    <label>目标主机</label>
+                    <input type="text" id="hostInput" placeholder="IP 地址或域名" value="223.5.5.5">
+                </div>
+                <div class="form-group">
+                    <label>次数</label>
+                    <input type="number" id="countInput" value="10" min="1" max="1000">
+                </div>
+                <div class="form-group">
+                    <label>超时 (ms)</label>
+                    <input type="number" id="timeoutInput" value="3000" min="500" max="30000">
+                </div>
+                <div class="form-group">
+                    <label>间隔 (ms)</label>
+                    <input type="number" id="intervalInput" value="1000" min="100" max="10000">
+                </div>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="continuousMode">
+                <label for="continuousMode">连续 Ping（直到手动停止）</label>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" id="pingBtn" onclick="startPing()">开始 Ping</button>
+                <button class="btn btn-secondary" id="stopBtn" onclick="stopPing()" disabled>停止</button>
+                <button class="btn btn-secondary" id="exportBtn" onclick="exportResults()" disabled>导出</button>
+            </div>
+        </div>
+
+        <!-- 统计 -->
+        <div class="card results-section" id="resultsSection">
+            <!-- 波形图 -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <span class="chart-title">延迟波形图</span>
+                    <div class="chart-legend">
+                        <span class="legend-item"><span class="legend-dot latency"></span>延迟</span>
+                        <span class="legend-item"><span class="legend-dot avg"></span>平均</span>
+                        <span class="legend-item"><span class="legend-dot timeout"></span>超时</span>
+                    </div>
+                </div>
+                <canvas id="pingChart"></canvas>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value success" id="successCount">0</div>
+                    <div class="stat-label">成功</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value fail" id="failCount">0</div>
+                    <div class="stat-label">失败</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value loss" id="lossRate">0%</div>
+                    <div class="stat-label">丢包率</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value avg" id="avgTime">0</div>
+                    <div class="stat-label">平均 (ms)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value min" id="minTime">0</div>
+                    <div class="stat-label">最小 (ms)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value max" id="maxTime">0</div>
+                    <div class="stat-label">最大 (ms)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value jitter" id="jitterTime">0</div>
+                    <div class="stat-label">抖动 (ms)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalCount" style="color: #fff;">0</div>
+                    <div class="stat-label">总计</div>
+                </div>
+            </div>
+
+            <div class="results-header">
+                <span class="card-title" style="margin: 0;">详细结果</span>
+                <button class="btn btn-secondary btn-small" onclick="clearResults()">清空</button>
+            </div>
+            <div class="results-scroll" id="resultsScroll">
+                <div class="empty-result">暂无结果</div>
+            </div>
+        </div>
+
+        <!-- 历史记录 -->
+        <div class="card">
+            <div class="card-title">
+                <span>历史记录</span>
+                <button class="btn btn-secondary btn-small" onclick="clearHistory()">清空</button>
+            </div>
+            <div class="results-scroll" id="historyScroll" style="max-height: 150px;">
+                <div class="empty-result">暂无历史记录</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        // ==================== Theme Sync ====================
+        const themeToggle = document.getElementById('themeToggle');
+        function applyTheme(theme) {
+            if (!theme) return;
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+        
+        // Initial Theme load
+        const _qs = new URLSearchParams(location.search);
+        const _qsMode = _qs.get('mode');
+        const _qsTheme = _qs.get('theme');
+        if (_qsMode || _qsTheme) {
+            applyTheme({ mode: _qsMode, key: _qsTheme });
+        } else {
+            ipcRenderer.invoke('theme:get').then(theme => {
+                applyTheme(theme);
+            }).catch(() => {
+                if (localStorage.getItem('ping-test-theme') === 'light') {
+                    applyTheme({ mode: 'light', key: 'light' });
+                }
+            });
+        }
+        
+        themeToggle.addEventListener('click', () => {
+            const isLight = document.documentElement.classList.toggle('light-theme');
+            applyTheme({
+                mode: isLight ? 'light' : 'dark',
+                key: isLight ? 'light' : 'one-dark'
+            });
+            localStorage.setItem('ping-test-theme', isLight ? 'light' : 'dark');
+        });
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+
+        let isPinging = false;
+        let pingResults = [];
+        let currentSeq = 0;
+        let pingHistory = JSON.parse(localStorage.getItem('pingHistory') || '[]');
+        
+        // 波形图配置
+        const chartCanvas = document.getElementById('pingChart');
+        const chartCtx = chartCanvas.getContext('2d');
+        const MAX_CHART_POINTS = 50; // 最多显示的点数
+
+        // 预设按钮
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('hostInput').value = btn.dataset.host;
+            });
+        });
+
+        // 渲染历史记录
+        function renderHistory() {
+            const container = document.getElementById('historyScroll');
+            if (pingHistory.length === 0) {
+                container.innerHTML = '<div class="empty-result">暂无历史记录</div>';
+                return;
+            }
+
+            container.innerHTML = pingHistory.slice().reverse().map((h, i) => `
+                <div class="history-item" onclick="loadHistory(${pingHistory.length - 1 - i})">
+                    <span class="history-host">${h.host}</span>
+                    <span class="history-stats">成功 ${h.success}/${h.total} | 平均 ${h.avg}ms | 丢包 ${h.loss}%</span>
+                    <span class="history-time">${h.time}</span>
+                </div>
+            `).join('');
+        }
+
+        function loadHistory(index) {
+            const h = pingHistory[index];
+            if (h) {
+                document.getElementById('hostInput').value = h.host;
+            }
+        }
+
+        function clearHistory() {
+            pingHistory = [];
+            localStorage.setItem('pingHistory', '[]');
+            renderHistory();
+        }
+
+        function saveToHistory() {
+            if (pingResults.length === 0) return;
+            
+            const host = document.getElementById('hostInput').value.trim();
+            const success = pingResults.filter(r => r.success).length;
+            const total = pingResults.length;
+            const times = pingResults.filter(r => r.success).map(r => r.time);
+            const avg = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+            const loss = Math.round(((total - success) / total) * 100);
+
+            pingHistory.push({
+                host,
+                success,
+                total,
+                avg,
+                loss,
+                time: new Date().toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+            });
+
+            // 最多保存 20 条
+            if (pingHistory.length > 20) {
+                pingHistory = pingHistory.slice(-20);
+            }
+
+            localStorage.setItem('pingHistory', JSON.stringify(pingHistory));
+            renderHistory();
+        }
+
+        async function startPing() {
+            const host = document.getElementById('hostInput').value.trim();
+            const count = parseInt(document.getElementById('countInput').value) || 10;
+            const timeout = parseInt(document.getElementById('timeoutInput').value) || 3000;
+            const interval = parseInt(document.getElementById('intervalInput').value) || 1000;
+            const continuous = document.getElementById('continuousMode').checked;
+
+            if (!host) {
+                alert('请输入目标主机');
+                return;
+            }
+
+            isPinging = true;
+            pingResults = [];
+            currentSeq = 0;
+            updateUI();
+
+            document.getElementById('resultsSection').classList.add('show');
+            document.getElementById('resultsScroll').innerHTML = '';
+            document.getElementById('exportBtn').disabled = true;
+            updateStats();
+
+            try {
+                await ipcRenderer.invoke('ping:start', { 
+                    host, 
+                    count: continuous ? 9999 : count, 
+                    timeout,
+                    interval
+                });
+            } catch (err) {
+                alert('Ping 失败: ' + err.message);
+            }
+
+            isPinging = false;
+            updateUI();
+            document.getElementById('exportBtn').disabled = pingResults.length === 0;
+            saveToHistory();
+        }
+
+        function stopPing() {
+            ipcRenderer.invoke('ping:stop');
+            isPinging = false;
+            updateUI();
+            document.getElementById('exportBtn').disabled = pingResults.length === 0;
+            saveToHistory();
+        }
+
+        function clearResults() {
+            pingResults = [];
+            currentSeq = 0;
+            document.getElementById('resultsScroll').innerHTML = '<div class="empty-result">暂无结果</div>';
+            document.getElementById('exportBtn').disabled = true;
+            updateStats();
+            drawChart(0); // 清空波形图
+        }
+
+        // 接收 Ping 结果
+        ipcRenderer.on('ping:result', (event, result) => {
+            currentSeq++;
+            result.seq = currentSeq;
+            pingResults.push(result);
+            updateStats();
+            appendResult(result);
+        });
+
+        // Ping 完成
+        ipcRenderer.on('ping:complete', () => {
+            isPinging = false;
+            updateUI();
+            document.getElementById('exportBtn').disabled = pingResults.length === 0;
+            saveToHistory();
+        });
+
+        function updateStats() {
+            const success = pingResults.filter(r => r.success).length;
+            const fail = pingResults.filter(r => !r.success).length;
+            const total = pingResults.length;
+            
+            const times = pingResults.filter(r => r.success).map(r => r.time);
+            const avgTime = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+            const minTime = times.length > 0 ? Math.min(...times) : 0;
+            const maxTime = times.length > 0 ? Math.max(...times) : 0;
+            
+            // 计算抖动 (平均偏差)
+            let jitter = 0;
+            if (times.length > 1) {
+                const diffs = [];
+                for (let i = 1; i < times.length; i++) {
+                    diffs.push(Math.abs(times[i] - times[i-1]));
+                }
+                jitter = Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length);
+            }
+            
+            const lossRate = total > 0 ? Math.round((fail / total) * 100) : 0;
+
+            document.getElementById('successCount').textContent = success;
+            document.getElementById('failCount').textContent = fail;
+            document.getElementById('avgTime').textContent = avgTime;
+            document.getElementById('minTime').textContent = minTime;
+            document.getElementById('maxTime').textContent = maxTime;
+            document.getElementById('jitterTime').textContent = jitter;
+            document.getElementById('lossRate').textContent = lossRate + '%';
+            document.getElementById('totalCount').textContent = total;
+            
+            // 更新波形图
+            drawChart(avgTime);
+        }
+        
+        // 绘制波形图
+        function drawChart(avgTime) {
+            const canvas = chartCanvas;
+            const ctx = chartCtx;
+            const dpr = window.devicePixelRatio || 1;
+            
+            // 设置画布大小
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            
+            const width = rect.width;
+            const height = rect.height;
+            const padding = { top: 10, right: 10, bottom: 20, left: 40 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+            
+            // 清空画布
+            ctx.clearRect(0, 0, width, height);
+            
+            // 获取最近的数据点
+            const recentResults = pingResults.slice(-MAX_CHART_POINTS);
+            if (recentResults.length === 0) {
+                ctx.fillStyle = '#888';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('暂无数据', width / 2, height / 2);
+                return;
+            }
+            
+            // 计算 Y 轴范围
+            const successTimes = recentResults.filter(r => r.success).map(r => r.time);
+            const maxTime = successTimes.length > 0 ? Math.max(...successTimes, avgTime) : 100;
+            const yMax = Math.ceil(maxTime * 1.2 / 10) * 10 || 100;
+            
+            // 绘制网格线
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (chartHeight / 4) * i;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(width - padding.right, y);
+                ctx.stroke();
+                
+                // Y 轴标签
+                ctx.fillStyle = '#888';
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillText(Math.round(yMax - (yMax / 4) * i) + '', padding.left - 5, y + 3);
+            }
+            
+            // X 轴点的间距
+            const xStep = chartWidth / Math.max(recentResults.length - 1, 1);
+            
+            // 绘制平均线
+            if (avgTime > 0) {
+                const avgY = padding.top + chartHeight - (avgTime / yMax) * chartHeight;
+                ctx.strokeStyle = '#ffa502';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(padding.left, avgY);
+                ctx.lineTo(width - padding.right, avgY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // 绘制延迟曲线
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            let firstPoint = true;
+            recentResults.forEach((r, i) => {
+                const x = padding.left + i * xStep;
+                if (r.success) {
+                    const y = padding.top + chartHeight - (r.time / yMax) * chartHeight;
+                    if (firstPoint) {
+                        ctx.moveTo(x, y);
+                        firstPoint = false;
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+            });
+            ctx.stroke();
+            
+            // 绘制数据点和超时标记
+            recentResults.forEach((r, i) => {
+                const x = padding.left + i * xStep;
+                if (r.success) {
+                    const y = padding.top + chartHeight - (r.time / yMax) * chartHeight;
+                    ctx.fillStyle = '#00d4ff';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // 超时标记
+                    ctx.fillStyle = '#ff4757';
+                    ctx.beginPath();
+                    ctx.arc(x, padding.top + 10, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+            
+            // X 轴标签
+            ctx.fillStyle = '#888';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            const startSeq = recentResults[0]?.seq || 1;
+            const endSeq = recentResults[recentResults.length - 1]?.seq || 1;
+            ctx.fillText('#' + startSeq, padding.left, height - 5);
+            ctx.fillText('#' + endSeq, width - padding.right, height - 5);
+        }
+
+        function appendResult(result) {
+            const container = document.getElementById('resultsScroll');
+            
+            if (container.querySelector('.empty-result')) {
+                container.innerHTML = '';
+            }
+
+            const item = document.createElement('div');
+            item.className = 'ping-item';
+            
+            if (result.success) {
+                item.innerHTML = `
+                    <span class="ping-seq">#${result.seq}</span>
+                    <span class="ping-host">${result.host}</span>
+                    <span class="ping-time success">${result.time} ms</span>
+                    <span class="ping-status"><span class="status-dot success"></span>成功</span>
+                `;
+            } else {
+                item.innerHTML = `
+                    <span class="ping-seq">#${result.seq}</span>
+                    <span class="ping-host">${result.host}</span>
+                    <span class="ping-time timeout">超时</span>
+                    <span class="ping-status"><span class="status-dot timeout"></span>失败</span>
+                `;
+            }
+
+            container.appendChild(item);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateUI() {
+            const pingBtn = document.getElementById('pingBtn');
+            const stopBtn = document.getElementById('stopBtn');
+
+            if (isPinging) {
+                pingBtn.disabled = true;
+                pingBtn.innerHTML = '<div class="spinner"></div> Ping 中...';
+                stopBtn.disabled = false;
+            } else {
+                pingBtn.disabled = false;
+                pingBtn.innerHTML = '开始 Ping';
+                stopBtn.disabled = true;
+            }
+        }
+
+        function exportResults() {
+            if (pingResults.length === 0) return;
+
+            const host = document.getElementById('hostInput').value.trim();
+            const times = pingResults.filter(r => r.success).map(r => r.time);
+            const success = pingResults.filter(r => r.success).length;
+            const total = pingResults.length;
+
+            let content = `Ping 测试报告\n`;
+            content += `================\n`;
+            content += `目标: ${host}\n`;
+            content += `时间: ${new Date().toLocaleString('zh-CN')}\n\n`;
+            content += `统计:\n`;
+            content += `  总计: ${total} 次\n`;
+            content += `  成功: ${success} 次\n`;
+            content += `  失败: ${total - success} 次\n`;
+            content += `  丢包率: ${Math.round(((total - success) / total) * 100)}%\n`;
+            if (times.length > 0) {
+                content += `  最小延迟: ${Math.min(...times)} ms\n`;
+                content += `  最大延迟: ${Math.max(...times)} ms\n`;
+                content += `  平均延迟: ${Math.round(times.reduce((a, b) => a + b, 0) / times.length)} ms\n`;
+            }
+            content += `\n详细结果:\n`;
+            content += `---------\n`;
+            
+            pingResults.forEach(r => {
+                if (r.success) {
+                    content += `#${r.seq} ${r.host} - ${r.time} ms\n`;
+                } else {
+                    content += `#${r.seq} ${r.host} - 超时\n`;
+                }
+            });
+
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ping_${host}_${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 初始化
+        renderHistory();
+    </script>
+</body>
+</html>

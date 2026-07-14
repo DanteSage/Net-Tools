@@ -1,0 +1,16 @@
+[
+  {
+    "id": "test-template-001",
+    "name": "测试模板-显示版本",
+    "category": "system",
+    "commands": "show version\nshow running-config",
+    "description": "测试用模板"
+  },
+  {
+    "id": "test-template-002",
+    "name": "测试模板-接口状态",
+    "category": "interface",
+    "commands": "show ip interface brief",
+    "description": "查看接口状态"
+  }
+]

@@ -1,0 +1,405 @@
+/**
+ * 批量执行 - 执行控制与进度样式
+ */
+
+/* 执行控制 */
+.execution-controls {
+    display: flex;
+    gap: 8px;
+}
+
+/* 执行头部布局 */
+.execution-header {
+    flex-wrap: nowrap;
+    gap: 16px;
+}
+
+.execution-header h3 {
+    flex-shrink: 0;
+}
+
+/* 执行进度 - 内嵌式 */
+.execution-progress-inline {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.progress-stats-inline {
+    display: flex;
+    gap: 12px;
+}
+
+.stat-inline {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.stat-inline .stat-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-inline.stat-success .stat-value { color: var(--success); }
+.stat-inline.stat-failed .stat-value { color: var(--danger); }
+.stat-inline.stat-pending .stat-value { color: var(--warning); }
+
+.progress-bar-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    max-width: 200px;
+}
+
+/* 执行进度 - 旧版 */
+.execution-progress {
+    margin-bottom: 10px;
+}
+
+.progress-stats {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 14px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    min-width: 70px;
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+}
+
+.stat-success .stat-value { color: var(--success); }
+.stat-failed .stat-value { color: var(--danger); }
+.stat-pending .stat-value { color: var(--warning); }
+
+.progress-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--success));
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 40px;
+    text-align: right;
+}
+
+.inline-progress {
+    display: inline-block;
+    width: 120px;
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    vertical-align: middle;
+    margin-left: 8px;
+}
+
+.inline-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--success));
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .progress-stats {
+        flex-wrap: wrap;
+    }
+    
+    .stat-item {
+        min-width: calc(50% - 12px);
+    }
+}
+
+/* ==================== 执行任务页面 V2 ==================== */
+
+.execution-page-v2 {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+}
+
+/* 执行控制面板 */
+.execution-control-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.control-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 开始执行按钮 - 大按钮 */
+.btn-execute {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.btn-execute:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(34, 197, 94, 0.4);
+}
+
+.btn-execute:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn-execute:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.btn-execute .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+}
+
+/* 执行中状态 */
+.btn-execute.running {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    animation: pulse-btn 1.5s infinite;
+}
+
+@keyframes pulse-btn {
+    0%, 100% { box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+    50% { box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5); }
+}
+
+/* 控制按钮 */
+.btn-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-control:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-control:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn-control.btn-pause:hover:not(:disabled) {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.btn-control.btn-stop:hover:not(:disabled) {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+/* 右侧控制区 */
+.control-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+/* 执行时间 */
+.execution-timer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-size: 13px;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+}
+
+.execution-timer.running {
+    opacity: 1;
+    color: var(--primary);
+    border-color: var(--primary);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.execution-timer.running svg {
+    animation: timer-pulse 1s infinite;
+}
+
+@keyframes timer-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.timer-value {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    min-width: 50px;
+}
+
+/* 进度环 */
+.progress-ring-container {
+    position: relative;
+    width: 56px;
+    height: 56px;
+}
+
+.progress-ring {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-bg {
+    fill: none;
+    stroke: var(--bg-tertiary);
+    stroke-width: 4;
+}
+
+.progress-ring-fill {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-dasharray: 150.8;
+    stroke-dashoffset: 150.8;
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+.progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* 统计数字 */
+.execution-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.execution-stats .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 50px;
+    padding: 0;
+    background: transparent;
+}
+
+.execution-stats .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.execution-stats .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.execution-stats .stat-total .stat-value { color: var(--text-primary); }
+.execution-stats .stat-success .stat-value { color: var(--success); }
+.execution-stats .stat-failed .stat-value { color: var(--danger); }
+.execution-stats .stat-pending .stat-value { color: var(--warning); }
+.execution-stats .stat-avg .stat-value { 
+    color: var(--text-secondary); 
+    font-size: 14px;
+}
+
+/* ==================== 亮色主题适配 ==================== */
+
+/* 执行控制面板 */
+[data-theme="light"] .execution-control-panel {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .execution-timer {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .btn-control {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .btn-control:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+}

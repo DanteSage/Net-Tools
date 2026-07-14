@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>测速服务器</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg-start: var(--bg-primary, #1a1a2e);
+            --bg-end: var(--bg-secondary, #16213e);
+            --text: var(--text-primary, #ffffff);
+            --text-muted: var(--text-muted, #888);
+            --text-soft: #666;
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.1));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.2));
+            --btn-sec-bg: rgba(255, 255, 255, 0.1);
+            --btn-sec-border: var(--border-light, rgba(255, 255, 255, 0.2));
+        }
+
+        :root.light-theme {
+            --bg-start: var(--bg-primary, #f5f7fa);
+            --bg-end: var(--bg-secondary, #e4e8ed);
+            --text: var(--text-primary, #1a1a2e);
+            --text-muted: var(--text-muted, #666);
+            --text-soft: #888;
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.9));
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.1));
+            --btn-sec-bg: rgba(0, 0, 0, 0.05);
+            --btn-sec-border: var(--border-light, rgba(0, 0, 0, 0.15));
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-start);
+            min-height: 100vh;
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 50px 30px 40px 30px;
+            user-select: none;
+        }
+
+        .status-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 25px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4); }
+            50% { box-shadow: 0 0 0 20px rgba(0, 212, 255, 0); }
+        }
+
+        .status-icon svg {
+            width: 40px;
+            height: 40px;
+            fill: #fff;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .status-text {
+            color: #00ff88;
+            font-size: 0.95rem;
+            margin-bottom: 30px;
+        }
+
+        .url-box {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px 30px;
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .url-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .url-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #00d4ff;
+            word-break: break-all;
+        }
+
+        .actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            font-size: 0.9rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #fff;
+        }
+
+        .btn-secondary {
+            background: var(--btn-sec-bg);
+            color: var(--text);
+            border: 1px solid var(--btn-sec-border);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
+
+        .tip {
+            margin-top: 25px;
+            font-size: 0.8rem;
+            color: var(--text-soft);
+            text-align: center;
+        }
+
+        .copied {
+            position: fixed;
+            top: 20px;
+            background: #00ff88;
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .copied.show { opacity: 1; }
+
+        /* ==================== 风格简化覆盖 ==================== */
+        body { padding-top: 48px !important; }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg-start);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+        .status-icon {
+            background: #2563eb !important;
+            animation: none !important;
+        }
+        .btn-primary {
+            background: #2563eb !important;
+        }
+        .btn-primary:hover {
+            background: #1d4ed8 !important;
+            transform: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="copied" id="copiedTip">已复制到剪贴板</div>
+
+    <div class="status-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+    </div>
+
+    <h1>测速服务器</h1>
+    <p class="status-text">● 服务运行中</p>
+
+    <div class="url-box">
+        <div class="url-label">测速地址（请使用局域网内其他设备的浏览器中打开）</div>
+        <div class="url-value" id="serverUrl">加载中...</div>
+    </div>
+
+    <div class="actions">
+        <button class="btn btn-primary" onclick="copyUrl()">复制地址</button>
+        <button class="btn btn-secondary" onclick="openBrowser()">本机测试</button>
+    </div>
+
+    <p class="tip">关闭此窗口将停止测速服务</p>
+
+    <script>
+        const { ipcRenderer, shell, clipboard } = require('electron');
+
+        let serverUrl = '';
+        let localUrl = '';
+
+        ipcRenderer.on('server-info', (event, info) => {
+            serverUrl = `http://${info.localIP}:${info.port}`;
+            localUrl = `http://localhost:${info.port}`;
+            document.getElementById('serverUrl').textContent = serverUrl;
+        });
+
+        function copyUrl() {
+            clipboard.writeText(serverUrl);
+            const tip = document.getElementById('copiedTip');
+            tip.classList.add('show');
+            setTimeout(() => tip.classList.remove('show'), 1500);
+        }
+
+        let currentTheme = { mode: 'dark', key: 'one-dark' };
+
+        function openBrowser() {
+            if (localUrl) {
+                try {
+                    const url = new URL(localUrl);
+                    url.searchParams.set('mode', currentTheme.mode);
+                    url.searchParams.set('theme', currentTheme.key);
+                    shell.openExternal(url.toString());
+                } catch (e) {
+                    shell.openExternal(localUrl);
+                }
+            }
+        }
+
+        // ==================== Theme Sync ====================
+        function applyTheme(theme) {
+            if (!theme) return;
+            currentTheme = theme;
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+        
+        // Initial Theme load
+        const _qs = new URLSearchParams(location.search);
+        const _qsMode = _qs.get('mode');
+        const _qsTheme = _qs.get('theme');
+        if (_qsMode || _qsTheme) {
+            applyTheme({ mode: _qsMode, key: _qsTheme });
+        } else {
+            ipcRenderer.invoke('theme:get').then(theme => {
+                applyTheme(theme);
+            }).catch(() => {});
+        }
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+    </script>
+</body>
+</html>

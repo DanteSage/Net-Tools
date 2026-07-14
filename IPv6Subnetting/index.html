@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>IPv6 子网计算器</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #10121e);
+            --text: var(--text-primary, #ffffff);
+            --text-muted: var(--text-muted, #8892b0);
+            --text-sec: var(--text-secondary, #cbd5e1);
+            --border-color: var(--border-color, rgba(255, 255, 255, 0.08));
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.04));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.08));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.12));
+            --result-bg: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #10121e);
+            --zebra-bg: rgba(255, 255, 255, 0.02);
+            --danger: var(--danger-color, #ef4444);
+            --danger-hover: #dc2626;
+            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+            --glass-blur: blur(16px);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f8fafc);
+            --text: var(--text-primary, #0f172a);
+            --text-muted: var(--text-muted, #64748b);
+            --text-sec: var(--text-secondary, #334155);
+            --border-color: var(--border-color, rgba(0, 0, 0, 0.08));
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, #cbd5e1);
+            --result-bg: var(--bg-secondary, #f1f5f9);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #ffffff);
+            --zebra-bg: var(--bg-secondary, #f8fafc);
+            --danger: var(--danger-color, #dc2626);
+            --danger-hover: #b91c1c;
+            --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+        }
+
+        /* Drag region */
+        .window-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            padding: 0 16px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            -webkit-app-region: drag;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .window-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .window-tabs {
+            display: flex;
+            gap: 24px;
+            height: 100%;
+            align-items: center;
+            -webkit-app-region: no-drag;
+        }
+
+        .tab-item {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            position: relative;
+            padding: 13px 0;
+            background: transparent;
+            border: none;
+            outline: none;
+            transition: color 0.15s;
+            font-family: inherit;
+        }
+
+        .tab-item:hover {
+            color: var(--text);
+        }
+
+        .tab-item.active {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .tab-item.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary);
+            border-radius: 1px;
+        }
+
+        .window-controls-placeholder {
+            width: 138px;
+            flex-shrink: 0;
+        }
+
+        /* Container */
+        .app-content {
+            margin-top: 48px;
+            height: calc(100vh - 48px);
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        /* Tab Panels */
+        .tab-panel {
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .tab-panel.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Card styles */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .code-font {
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        /* Form elements */
+        .form-row-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .form-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-item.horizontal {
+            flex-direction: row;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .form-label-horizontal {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-sec);
+            width: 90px;
+            flex-shrink: 0;
+            text-align: right;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .form-input {
+            width: 100%;
+            height: 36px;
+            padding: 0 12px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        /* Buttons */
+        .btn {
+            height: 36px;
+            padding: 0 16px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            font-family: inherit;
+            flex-shrink: 0;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--result-bg);
+            border: 1px solid var(--input-border);
+            color: var(--text);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #ffffff;
+        }
+
+        .btn-danger:hover {
+            background: var(--danger-hover);
+        }
+
+        .btn-icon-only {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+        .btn-icon-only svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        .input-btn-group {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+
+        /* Results Card */
+        .results-box-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 12px;
+        }
+
+        .results-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        /* Radio Options */
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            font-size: 0.82rem;
+            color: var(--text-sec);
+        }
+
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .radio-input {
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border: 1px solid var(--input-border);
+            border-radius: 50%;
+            outline: none;
+            background: var(--input-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .radio-input:checked {
+            border-color: var(--primary);
+        }
+
+        .radio-input:checked::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--primary);
+        }
+
+        .result-box {
+            background: var(--result-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .result-line {
+            display: flex;
+            font-size: 0.85rem;
+        }
+
+        .result-label {
+            color: var(--text-muted);
+            width: 110px;
+            flex-shrink: 0;
+        }
+
+        .result-value {
+            color: var(--text);
+            font-weight: 500;
+            word-break: break-all;
+        }
+
+        /* Tab 3 Elements */
+        .subnet-agg-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-width: 720px;
+        }
+
+        .agg-result-box {
+            background: var(--result-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .agg-result-row {
+            display: flex;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        .agg-result-row:last-child {
+            border-bottom: none;
+        }
+
+        .agg-result-row:nth-child(odd) {
+            background: var(--zebra-bg);
+        }
+
+        .agg-result-label {
+            color: var(--text-muted);
+            width: 140px;
+            flex-shrink: 0;
+            text-align: right;
+            padding-right: 16px;
+        }
+
+        .agg-result-value {
+            color: var(--text);
+            font-weight: 500;
+            word-break: break-all;
+        }
+
+        /* Toast notifications */
+        .toast-msg {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: rgba(15, 23, 42, 0.9);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            z-index: 2000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+            pointer-events: none;
+        }
+
+        .toast-msg.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <!-- WINDOW HEADER BAR (Draggable) -->
+    <header class="window-header">
+        <div class="window-title">IPv6子网计算器</div>
+        <nav class="window-tabs">
+            <button class="tab-item active" data-target="tab-calc">子网计算</button>
+            <button class="tab-item" data-target="tab-divide">子网划分</button>
+            <button class="tab-item" data-target="tab-agg">子网聚合</button>
+        </nav>
+        <div class="window-controls-placeholder"></div>
+    </header>
+
+    <!-- CONTENT WRAPPER -->
+    <main class="app-content">
+
+        <!-- ==================== TAB 1: 子网计算 ==================== -->
+        <div id="tab-calc" class="tab-panel active">
+            <div class="card">
+                <div class="form-row-vertical">
+                    <div class="form-item horizontal">
+                        <label class="form-label-horizontal">IPv6地址：</label>
+                        <div class="input-btn-group">
+                            <input type="text" id="calc-ip-input" class="form-input code-font" placeholder="请输入IPv6地址和前缀(1-128)，比如2001:0a11::/64或2001:0A11:0000:0000:0000:0000:0000:0000/64" value="2001:0a11::/64">
+                            <button class="btn btn-primary" id="btn-calc-run">计算</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="results-header-row">
+                    <div class="results-box-title" style="margin-bottom: 0;">计算结果：</div>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="calc-format" value="compressed" class="radio-input" checked>
+                            压缩地址
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="calc-format" value="expanded" class="radio-input">
+                            扩展地址
+                        </label>
+                    </div>
+                </div>
+                <div class="result-box">
+                    <div class="result-line">
+                        <span class="result-label">子网地址范围：</span>
+                        <span class="result-value code-font" id="calc-res-range">-</span>
+                    </div>
+                    <div class="result-line">
+                        <span class="result-label">首个可用地址：</span>
+                        <span class="result-value code-font" id="calc-res-first">-</span>
+                    </div>
+                    <div class="result-line">
+                        <span class="result-label">最后可用地址：</span>
+                        <span class="result-value code-font" id="calc-res-last">-</span>
+                    </div>
+                    <div class="result-line">
+                        <span class="result-label">可用地址数量：</span>
+                        <span class="result-value code-font" id="calc-res-count">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 2: 子网划分 ==================== -->
+        <!-- Note: Depicting same layout as Tab 1 in screenshot -->
+        <div id="tab-divide" class="tab-panel">
+            <div class="card">
+                <div class="form-row-vertical">
+                    <div class="form-item horizontal">
+                        <label class="form-label-horizontal">IPv6地址：</label>
+                        <div class="input-btn-group">
+                            <input type="text" id="divide-ip-input" class="form-input code-font" placeholder="请输入IPv6地址和前缀(1-128)，比如2001:0a11::/64或2001:0A11:0000:0000:0000:0000:0000:0000/64">
+                            <button class="btn btn-primary" id="btn-divide-run">计算</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="results-header-row">
+                    <div class="results-box-title" style="margin-bottom: 0;">计算结果：</div>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="divide-format" value="compressed" class="radio-input" checked>
+                            压缩地址
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="divide-format" value="expanded" class="radio-input">
+                            扩展地址
+                        </label>
+                    </div>
+                </div>
+                <div class="result-box">
+                    <div class="result-line">
+                        <span class="result-label">子网地址范围：</span>
+                        <span class="result-value code-font" id="divide-res-range">-</span>
+                    </div>
+                    <div class="result-line">
+                        <span class="result-label">首个可用地址：</span>
+                        <span class="result-value code-font" id="divide-res-first">-</span>
+                    </div>
+                    <div class="result-line">
+                        <span class="result-label">最后可用地址：</span>
+                        <span class="result-value code-font" id="divide-res-last">-</span>
+                    </div>
+                    <div class="result-line">
+                        <span class="result-label">可用地址数量：</span>
+                        <span class="result-value code-font" id="divide-res-count">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 3: 子网聚合 ==================== -->
+        <div id="tab-agg" class="tab-panel">
+            <div class="card">
+                <div class="subnet-agg-list" id="agg-inputs-container">
+                    <!-- Dynamic Aggregation Input rows will be injected here -->
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="results-header-row">
+                    <div class="results-box-title" style="margin-bottom: 0;">计算结果：</div>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="agg-format" value="compressed" class="radio-input" checked>
+                            压缩地址
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="agg-format" value="expanded" class="radio-input">
+                            扩展地址
+                        </label>
+                    </div>
+                </div>
+                <div class="agg-result-box">
+                    <div class="agg-result-row">
+                        <span class="agg-result-label">IPv6地址：</span>
+                        <span class="agg-result-value code-font" id="agg-res-ip">-</span>
+                    </div>
+                    <div class="agg-result-row">
+                        <span class="agg-result-label">子网地址范围：</span>
+                        <span class="agg-result-value code-font" id="agg-res-range">-</span>
+                    </div>
+                    <div class="agg-result-row">
+                        <span class="agg-result-label">首个可用地址：</span>
+                        <span class="agg-result-value code-font" id="agg-res-first">-</span>
+                    </div>
+                    <div class="agg-result-row">
+                        <span class="agg-result-label">最后可用地址：</span>
+                        <span class="agg-result-value code-font" id="agg-res-last">-</span>
+                    </div>
+                    <div class="agg-result-row">
+                        <span class="agg-result-label">可用地址数量：</span>
+                        <span class="agg-result-value code-font" id="agg-res-count">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- TOAST MSG -->
+    <div id="toast" class="toast-msg">复制成功</div>
+
+    <!-- CLIENT LOGIC -->
+    <script>
+        // ==================== IPv6 HELPERS ====================
+        // Parses IPv6 to 8 blocks of 16-bit integers
+        function parseIpv6(ipStr) {
+            ipStr = ipStr.trim().toLowerCase();
+            const doubleColonIdx = ipStr.indexOf('::');
+            
+            if (doubleColonIdx !== -1) {
+                const leftPart = ipStr.substring(0, doubleColonIdx).split(':').filter(Boolean);
+                const rightPart = ipStr.substring(doubleColonIdx + 2).split(':').filter(Boolean);
+                
+                const leftCount = leftPart.length;
+                const rightCount = rightPart.length;
+                const missingCount = 8 - (leftCount + rightCount);
+                if (missingCount < 0) return null;
+                
+                const blocks = [];
+                for (let i = 0; i < leftCount; i++) {
+                    const val = parseInt(leftPart[i], 16);
+                    if (isNaN(val) || val < 0 || val > 0xFFFF) return null;
+                    blocks.push(val);
+                }
+                for (let i = 0; i < missingCount; i++) {
+                    blocks.push(0);
+                }
+                for (let i = 0; i < rightCount; i++) {
+                    const val = parseInt(rightPart[i], 16);
+                    if (isNaN(val) || val < 0 || val > 0xFFFF) return null;
+                    blocks.push(val);
+                }
+                return blocks;
+            } else {
+                const parts = ipStr.split(':');
+                if (parts.length !== 8) return null;
+                const blocks = [];
+                for (let i = 0; i < 8; i++) {
+                    const val = parseInt(parts[i], 16);
+                    if (isNaN(val) || val < 0 || val > 0xFFFF) return null;
+                    blocks.push(val);
+                }
+                return blocks;
+            }
+        }
+
+        // Expands blocks to fully padded format (RFC 5952 non-compressed)
+        function expandIpv6(blocks) {
+            return blocks.map(b => b.toString(16).padStart(4, '0')).join(':');
+        }
+
+        // Compresses blocks to standard compressed form (RFC 5952)
+        function compressIpv6(blocks) {
+            const hexList = blocks.map(b => b.toString(16));
+            
+            let bestStart = -1;
+            let bestLen = 0;
+            let curStart = -1;
+            let curLen = 0;
+            
+            for (let i = 0; i < 8; i++) {
+                if (blocks[i] === 0) {
+                    if (curLen === 0) {
+                        curStart = i;
+                    }
+                    curLen++;
+                } else {
+                    if (curLen > bestLen) {
+                        bestStart = curStart;
+                        bestLen = curLen;
+                    }
+                    curLen = 0;
+                }
+            }
+            if (curLen > bestLen) {
+                bestStart = curStart;
+                bestLen = curLen;
+            }
+            
+            if (bestLen > 1) {
+                const left = hexList.slice(0, bestStart).join(':');
+                const right = hexList.slice(bestStart + bestLen).join(':');
+                return left + '::' + right;
+            }
+            
+            return hexList.join(':');
+        }
+
+        // Calculate start and end IP block ranges
+        function getSubnetRange(blocks, prefix) {
+            const start = [];
+            const end = [];
+            
+            for (let i = 0; i < 8; i++) {
+                const startBit = i * 16;
+                if (prefix >= (i + 1) * 16) {
+                    start.push(blocks[i]);
+                    end.push(blocks[i]);
+                } else if (prefix <= startBit) {
+                    start.push(0);
+                    end.push(0xFFFF);
+                } else {
+                    const k = prefix - startBit;
+                    const mask = (0xFFFF << (16 - k)) & 0xFFFF;
+                    const startVal = blocks[i] & mask;
+                    start.push(startVal);
+                    end.push(startVal | (~mask & 0xFFFF));
+                }
+            }
+            return { start, end };
+        }
+
+        // Helper to format BigInt with commas
+        function formatBigInt(val) {
+            const str = val.toString();
+            return str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        }
+
+        // ==================== TABS SWITCHING ====================
+        const tabs = document.querySelectorAll('.tab-item');
+        const panels = document.querySelectorAll('.tab-panel');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                panels.forEach(p => p.classList.remove('active'));
+
+                tab.classList.add('active');
+                const target = document.getElementById(tab.dataset.target);
+                if (target) target.classList.add('active');
+            });
+        });
+
+        // ==================== TOAST MSG ====================
+        const toast = document.getElementById('toast');
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 1500);
+        }
+
+        // ==================== TAB 1: 子网计算 ====================
+        const calcIpInput = document.getElementById('calc-ip-input');
+        const btnCalcRun = document.getElementById('btn-calc-run');
+        const calcFormatRadios = document.querySelectorAll('input[name="calc-format"]');
+
+        const calcResRange = document.getElementById('calc-res-range');
+        const calcResFirst = document.getElementById('calc-res-first');
+        const calcResLast = document.getElementById('calc-res-last');
+        const calcResCount = document.getElementById('calc-res-count');
+
+        let calcLastResult = null; // Store last calculated range
+
+        btnCalcRun.addEventListener('click', calculateTab1);
+        calcIpInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') calculateTab1();
+        });
+
+        function calculateTab1() {
+            const val = calcIpInput.value.trim();
+            if (!val) {
+                showToast("请输入 IPv6 地址");
+                return;
+            }
+
+            let ipStr = val;
+            let prefix = 64;
+            if (val.includes('/')) {
+                const parts = val.split('/');
+                ipStr = parts[0];
+                prefix = parseInt(parts[1]);
+                if (isNaN(prefix) || prefix < 1 || prefix > 128) {
+                    showToast("前缀长度范围应为 1-128");
+                    return;
+                }
+            }
+
+            const blocks = parseIpv6(ipStr);
+            if (!blocks) {
+                showToast("IPv6 地址格式不正确");
+                return;
+            }
+
+            const { start, end } = getSubnetRange(blocks, prefix);
+            const count = BigInt(2) ** BigInt(128 - prefix);
+
+            calcLastResult = { start, end, count };
+            renderTab1Result();
+        }
+
+        function renderTab1Result() {
+            if (!calcLastResult) return;
+            const format = document.querySelector('input[name="calc-format"]:checked').value;
+            const formatFn = format === 'expanded' ? expandIpv6 : compressIpv6;
+
+            const startStr = formatFn(calcLastResult.start);
+            const endStr = formatFn(calcLastResult.end);
+
+            calcResRange.textContent = `${startStr} - ${endStr}`;
+            calcResFirst.textContent = startStr;
+            calcResLast.textContent = endStr;
+            calcResCount.textContent = formatBigInt(calcLastResult.count);
+        }
+
+        calcFormatRadios.forEach(radio => {
+            radio.addEventListener('change', renderTab1Result);
+        });
+
+
+        // ==================== TAB 2: 子网划分 ====================
+        const divideIpInput = document.getElementById('divide-ip-input');
+        const btnDivideRun = document.getElementById('btn-divide-run');
+        const divideFormatRadios = document.querySelectorAll('input[name="divide-format"]');
+
+        const divideResRange = document.getElementById('divide-res-range');
+        const divideResFirst = document.getElementById('divide-res-first');
+        const divideResLast = document.getElementById('divide-res-last');
+        const divideResCount = document.getElementById('divide-res-count');
+
+        let divideLastResult = null;
+
+        btnDivideRun.addEventListener('click', calculateTab2);
+        divideIpInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') calculateTab2();
+        });
+
+        function calculateTab2() {
+            const val = divideIpInput.value.trim();
+            if (!val) {
+                showToast("请输入 IPv6 地址");
+                return;
+            }
+
+            let ipStr = val;
+            let prefix = 64;
+            if (val.includes('/')) {
+                const parts = val.split('/');
+                ipStr = parts[0];
+                prefix = parseInt(parts[1]);
+                if (isNaN(prefix) || prefix < 1 || prefix > 128) {
+                    showToast("前缀长度范围应为 1-128");
+                    return;
+                }
+            }
+
+            const blocks = parseIpv6(ipStr);
+            if (!blocks) {
+                showToast("IPv6 地址格式不正确");
+                return;
+            }
+
+            const { start, end } = getSubnetRange(blocks, prefix);
+            const count = BigInt(2) ** BigInt(128 - prefix);
+
+            divideLastResult = { start, end, count };
+            renderTab2Result();
+        }
+
+        function renderTab2Result() {
+            if (!divideLastResult) return;
+            const format = document.querySelector('input[name="divide-format"]:checked').value;
+            const formatFn = format === 'expanded' ? expandIpv6 : compressIpv6;
+
+            const startStr = formatFn(divideLastResult.start);
+            const endStr = formatFn(divideLastResult.end);
+
+            divideResRange.textContent = `${startStr} - ${endStr}`;
+            divideResFirst.textContent = startStr;
+            divideResLast.textContent = endStr;
+            divideResCount.textContent = formatBigInt(divideLastResult.count);
+        }
+
+        divideFormatRadios.forEach(radio => {
+            radio.addEventListener('change', renderTab2Result);
+        });
+
+
+        // ==================== TAB 3: 子网聚合 ====================
+        const aggInputsContainer = document.getElementById('agg-inputs-container');
+        const aggFormatRadios = document.querySelectorAll('input[name="agg-format"]');
+
+        const aggResIp = document.getElementById('agg-res-ip');
+        const aggResRange = document.getElementById('agg-res-range');
+        const aggResFirst = document.getElementById('agg-res-first');
+        const aggResLast = document.getElementById('agg-res-last');
+        const aggResCount = document.getElementById('agg-res-count');
+
+        let aggSubnetList = ["", ""];
+        let aggLastResult = null;
+
+        function renderAggRows() {
+            let html = '';
+            const N = aggSubnetList.length;
+            aggSubnetList.forEach((val, idx) => {
+                const itemNum = idx + 1;
+                
+                let buttonGroupHtml = '';
+                if (idx === 0) {
+                    // Row 1: only input
+                    buttonGroupHtml = `<input type="text" class="form-input code-font agg-ip-input" placeholder="请输入IPv6地址和前缀(1-128)，比如2001:0a11::/64或2001:0A11:0000:0000:0000:0000:0000:0000/64" value="${val}">`;
+                } else if (idx === 1 && N === 2) {
+                    // Row 2 when N = 2: input + (+) + 计算
+                    buttonGroupHtml = `
+                        <div class="input-btn-group">
+                            <input type="text" class="form-input code-font agg-ip-input" placeholder="请输入IPv6地址和前缀(1-128)，比如2001:0a11::/64或2001:0A11:0000:0000:0000:0000:0000:0000/64" value="${val}">
+                            <button class="btn btn-icon-only btn-secondary" title="添加子网" onclick="addAggInputRow()">
+                                <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                            </button>
+                            <button class="btn btn-primary" onclick="calculateSupernet()">计算</button>
+                        </div>
+                    `;
+                } else if (idx === 1 && N > 2) {
+                    // Row 2 when N > 2: only input
+                    buttonGroupHtml = `<input type="text" class="form-input code-font agg-ip-input" placeholder="请输入IPv6地址和前缀(1-128)，比如2001:0a11::/64或2001:0A11:0000:0000:0000:0000:0000:0000/64" value="${val}">`;
+                } else if (idx > 1 && idx < N - 1) {
+                    // Middle optional rows: input + (-)
+                    buttonGroupHtml = `
+                        <div class="input-btn-group">
+                            <input type="text" class="form-input code-font agg-ip-input" placeholder="请输入IPv6地址和前缀(1-128)，比如2001:0a11::/64或2001:0A11:0000:0000:0000:0000:0000:0000/64" value="${val}">
+                            <button class="btn btn-icon-only btn-danger" title="删除" onclick="removeAggInputRow(${idx})">
+                                <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+                            </button>
+                        </div>
+                    `;
+                } else if (idx === N - 1) {
+                    // The last row when N > 2: input + (+) + (-) + 计算
+                    buttonGroupHtml = `
+                        <div class="input-btn-group">
+                            <input type="text" class="form-input code-font agg-ip-input" placeholder="请输入IPv6地址和前缀(1-128)，比如2001:0a11::/64或2001:0A11:0000:0000:0000:0000:0000:0000/64" value="${val}">
+                            <button class="btn btn-icon-only btn-secondary" title="添加子网" onclick="addAggInputRow()">
+                                <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                            </button>
+                            <button class="btn btn-icon-only btn-danger" title="删除" onclick="removeAggInputRow(${idx})">
+                                <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>
+                            </button>
+                            <button class="btn btn-primary" onclick="calculateSupernet()">计算</button>
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div class="form-item horizontal agg-row" data-index="${idx}">
+                        <label class="form-label-horizontal">子网${itemNum}：</label>
+                        ${buttonGroupHtml}
+                    </div>
+                `;
+            });
+            aggInputsContainer.innerHTML = html;
+
+            // Bind updates
+            const inputs = aggInputsContainer.querySelectorAll('.agg-ip-input');
+            inputs.forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const rowIdx = parseInt(e.target.closest('.agg-row').dataset.index);
+                    aggSubnetList[rowIdx] = e.target.value;
+                });
+            });
+        }
+
+        window.addAggInputRow = function() {
+            const inputs = aggInputsContainer.querySelectorAll('.agg-ip-input');
+            inputs.forEach((inp, idx) => {
+                aggSubnetList[idx] = inp.value;
+            });
+            aggSubnetList.push("");
+            renderAggRows();
+        };
+
+        window.removeAggInputRow = function(idx) {
+            const inputs = aggInputsContainer.querySelectorAll('.agg-ip-input');
+            inputs.forEach((inp, i) => {
+                aggSubnetList[i] = inp.value;
+            });
+            aggSubnetList.splice(idx, 1);
+            renderAggRows();
+        };
+
+        function getCommonPrefixLength(ipA, ipB) {
+            let prefix = 0;
+            for (let i = 0; i < 8; i++) {
+                const diff = ipA[i] ^ ipB[i];
+                if (diff === 0) {
+                    prefix += 16;
+                } else {
+                    const leadingZeros = Math.clz32(diff) - 16;
+                    prefix += leadingZeros;
+                    break;
+                }
+            }
+            return prefix;
+        }
+
+        window.calculateSupernet = function() {
+            const inputs = aggInputsContainer.querySelectorAll('.agg-ip-input');
+            const subnets = [];
+            let hasInvalid = false;
+
+            inputs.forEach((inp, idx) => {
+                const val = inp.value.trim();
+                aggSubnetList[idx] = val;
+                if (!val) return;
+
+                let ipStr = val;
+                let prefix = 128;
+                if (val.includes('/')) {
+                    const parts = val.split('/');
+                    ipStr = parts[0];
+                    prefix = parseInt(parts[1]);
+                    if (isNaN(prefix) || prefix < 1 || prefix > 128) {
+                        hasInvalid = true;
+                        showToast(`子网 ${idx + 1} 的前缀不正确`);
+                    }
+                }
+
+                const blocks = parseIpv6(ipStr);
+                if (!blocks) {
+                    hasInvalid = true;
+                    showToast(`子网 ${idx + 1} 的 IPv6 地址不正确`);
+                }
+
+                if (!hasInvalid) {
+                    const { start, end } = getSubnetRange(blocks, prefix);
+                    subnets.push({ start, end });
+                }
+            });
+
+            if (hasInvalid) return;
+            if (subnets.length === 0) {
+                showToast("请输入子网网段");
+                return;
+            }
+
+            // Find min and max bounds for LCP
+            // Let's implement block comparison
+            const compareBlocks = (a, b) => {
+                for (let i = 0; i < 8; i++) {
+                    if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+                }
+                return 0;
+            };
+
+            let globalMin = subnets[0].start;
+            let globalMax = subnets[0].end;
+
+            for (let i = 1; i < subnets.length; i++) {
+                if (compareBlocks(subnets[i].start, globalMin) < 0) {
+                    globalMin = subnets[i].start;
+                }
+                if (compareBlocks(subnets[i].end, globalMax) > 0) {
+                    globalMax = subnets[i].end;
+                }
+            }
+
+            const supernetPrefix = getCommonPrefixLength(globalMin, globalMax);
+            const { start: supernetStart, end: supernetEnd } = getSubnetRange(globalMin, supernetPrefix);
+            const count = BigInt(2) ** BigInt(128 - supernetPrefix);
+
+            aggLastResult = {
+                prefix: supernetPrefix,
+                net: supernetStart,
+                start: supernetStart,
+                end: supernetEnd,
+                count: count
+            };
+
+            renderAggResult();
+        };
+
+        function renderAggResult() {
+            if (!aggLastResult) return;
+            const format = document.querySelector('input[name="agg-format"]:checked').value;
+            const formatFn = format === 'expanded' ? expandIpv6 : compressIpv6;
+
+            const netStr = formatFn(aggLastResult.net);
+            const startStr = formatFn(aggLastResult.start);
+            const endStr = formatFn(aggLastResult.end);
+
+            aggResIp.textContent = `${netStr}/${aggLastResult.prefix}`;
+            aggResRange.textContent = `${startStr} - ${endStr}`;
+            aggResFirst.textContent = startStr;
+            aggResLast.textContent = endStr;
+            aggResCount.textContent = formatBigInt(aggLastResult.count);
+        }
+
+        aggFormatRadios.forEach(radio => {
+            radio.addEventListener('change', renderAggResult);
+        });
+
+
+        // ==================== INITIALIZATION ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            calculateTab1();
+            renderAggRows();
+
+            // IPC Theme Synchronizer
+            try {
+                const { ipcRenderer } = require('electron');
+                function applyTheme(theme) {
+                    if (!theme) return;
+                    document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+                    document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+                    if (theme.mode === 'light') {
+                        document.documentElement.classList.add('light-theme');
+                    } else {
+                        document.documentElement.classList.remove('light-theme');
+                    }
+                }
+                
+                // Initial load sync
+                const _qs = new URLSearchParams(location.search);
+                const _qsMode = _qs.get('mode');
+                const _qsTheme = _qs.get('theme');
+                if (_qsMode || _qsTheme) {
+                    applyTheme({ mode: _qsMode, key: _qsTheme });
+                } else {
+                    ipcRenderer.invoke('theme:get').then(theme => {
+                        applyTheme(theme);
+                    }).catch(() => {});
+                }
+
+                ipcRenderer.on('theme:changed', (event, theme) => {
+                    applyTheme(theme);
+                });
+            } catch(e) {}
+        });
+    </script>
+</body>
+</html>

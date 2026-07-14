@@ -1,0 +1,20 @@
+/**
+ * 批量执行模块 - 样式入口文件
+ * 
+ * 将原 batch.css (74KB) 拆分为以下模块：
+ * - batch-steps.css    步骤指示器
+ * - batch-devices.css  设备选择与筛选
+ * - batch-targets.css  目标模式
+ * - batch-commands.css 命令编辑器
+ * - batch-execution.css 执行控制与进度
+ * - batch-results.css  执行结果展示
+ * - batch-preview.css  预览模态框
+ */
+
+@import url('./batch-steps.css');
+@import url('./batch-devices.css');
+@import url('./batch-targets.css');
+@import url('./batch-commands.css');
+@import url('./batch-execution.css');
+@import url('./batch-results.css');
+@import url('./batch-preview.css');

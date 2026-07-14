@@ -1,0 +1,12 @@
+{
+  "name": "port-scanner",
+  "version": "1.0.0",
+  "description": "TCP/UDP 端口探测工具",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^28.0.0"
+  }
+}

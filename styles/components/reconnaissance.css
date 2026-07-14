@@ -1,0 +1,539 @@
+/**
+ * 资产勘测 (Asset Reconnaissance) 样式
+ */
+
+/* ==================== 容器与主布局 ==================== */
+.recon-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.recon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+}
+
+/* 卡片荧光边框高亮 */
+.recon-card.purple-neon {
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.recon-card.purple-neon:hover {
+    border-color: #bf5af2 !important;
+    box-shadow: 0 4px 20px rgba(191, 90, 242, 0.25) !important;
+    transform: translateY(-4px);
+}
+.recon-card.purple-neon .tool-icon {
+    color: #bf5af2 !important;
+}
+
+.recon-card.green-neon {
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.recon-card.green-neon:hover {
+    border-color: #30d158 !important;
+    box-shadow: 0 4px 20px rgba(48, 209, 88, 0.25) !important;
+    transform: translateY(-4px);
+}
+.recon-card.green-neon .tool-icon {
+    color: #30d158 !important;
+}
+
+.recon-card.blue-neon {
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.recon-card.blue-neon:hover {
+    border-color: #0a84ff !important;
+    box-shadow: 0 4px 20px rgba(10, 132, 255, 0.25) !important;
+    transform: translateY(-4px);
+}
+.recon-card.blue-neon .tool-icon {
+    color: #0a84ff !important;
+}
+
+/* ==================== 子视图通用样式 ==================== */
+.recon-view {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: recon-fadeIn 0.3s ease-out;
+}
+
+@keyframes recon-fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.recon-control-panel {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.recon-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+.recon-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.recon-form-group.flex-none {
+    flex: none;
+    min-width: auto;
+}
+
+.recon-form-group label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.recon-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 13.5px;
+    height: 36px;
+    outline: none;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.recon-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.2);
+}
+
+.recon-range-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+}
+
+.recon-range-val {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 24px;
+}
+
+/* ==================== 微动画与扫描区域 ==================== */
+.recon-scan-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    min-height: 250px;
+    position: relative;
+    overflow: hidden;
+}
+
+.recon-scan-status {
+    margin-top: 20px;
+    text-align: center;
+    z-index: 10;
+}
+
+.recon-scan-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.recon-scan-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* 1. 雷达扫描动画 (域名爆破) */
+.radar-grid {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(48, 209, 88, 0.05) 0%, rgba(0, 0, 0, 0.3) 100%);
+    border: 1.5px solid rgba(48, 209, 88, 0.3);
+    box-shadow: 0 0 20px rgba(48, 209, 88, 0.05);
+}
+
+.radar-circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1px dashed rgba(48, 209, 88, 0.2);
+}
+
+.radar-circle-1 { width: 120px; height: 120px; }
+.radar-circle-2 { width: 60px; height: 60px; }
+
+.radar-cross-h {
+    position: absolute;
+    top: 50%;
+    left: 10px;
+    right: 10px;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(48, 209, 88, 0.2), transparent);
+}
+
+.radar-cross-v {
+    position: absolute;
+    left: 50%;
+    top: 10px;
+    bottom: 10px;
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, rgba(48, 209, 88, 0.2), transparent);
+}
+
+/* 雷达扇形扫过部分 */
+.radar-sweep {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(48, 209, 88, 0.3) 0deg, rgba(48, 209, 88, 0.05) 45deg, transparent 90deg);
+    transform-origin: center;
+    animation: radar-rotate 3s linear infinite;
+    display: none; /* 运行时激活 */
+}
+
+@keyframes radar-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.scanning .radar-sweep {
+    display: block;
+}
+
+.scanning .radar-grid {
+    animation: radar-pulse 2s infinite ease-in-out;
+}
+
+@keyframes radar-pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(48, 209, 88, 0.05); border-color: rgba(48, 209, 88, 0.3); }
+    50% { box-shadow: 0 0 35px rgba(48, 209, 88, 0.2); border-color: rgba(48, 209, 88, 0.6); }
+}
+
+/* 2. 紫色环形进度条动画 (指纹识别) */
+.progress-ring-container {
+    position: relative;
+    width: 180px;
+    height: 180px;
+}
+
+.progress-ring-circle {
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+}
+
+.progress-ring-bg {
+    stroke: rgba(191, 90, 242, 0.1);
+}
+
+.progress-ring-fill {
+    stroke: #bf5af2;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s ease;
+    filter: drop-shadow(0 0 5px rgba(191, 90, 242, 0.7));
+}
+
+.progress-ring-inner-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(191, 90, 242, 0.08) 0%, transparent 70%);
+}
+
+.progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-shadow: 0 0 10px rgba(191, 90, 242, 0.3);
+}
+
+.scanning .progress-ring-inner-glow {
+    animation: purple-pulse 2s infinite ease-in-out;
+}
+
+@keyframes purple-pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+    50% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+}
+
+/* ==================== FOFA 配置抽屉 (Drawer) ==================== */
+.fofa-config-trigger {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: color var(--transition-fast);
+}
+
+.fofa-config-trigger:hover {
+    color: #0a84ff;
+}
+
+.fofa-drawer-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+}
+
+.fofa-drawer-backdrop.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.fofa-drawer {
+    position: fixed;
+    top: 0;
+    right: -360px;
+    width: 360px;
+    height: 100%;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border-color);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.3);
+    transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fofa-drawer.active {
+    right: 0;
+}
+
+.fofa-drawer-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.fofa-drawer-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-primary);
+}
+
+.fofa-drawer-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.fofa-drawer-close:hover {
+    color: var(--text-primary);
+}
+
+.fofa-drawer-body {
+    padding: 20px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+}
+
+.fofa-drawer-footer {
+    padding: 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* ==================== 结果展示表格与滚动 ==================== */
+.recon-results-panel {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.recon-results-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.recon-results-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.recon-results-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.recon-table-wrapper {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.recon-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+}
+
+.recon-table th,
+.recon-table td {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.recon-table th {
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-weight: 500;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    white-space: nowrap;
+}
+
+.recon-table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.badge-fingerprint {
+    background-color: rgba(191, 90, 242, 0.12);
+    color: #bf5af2;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-right: 4px;
+    display: inline-block;
+}
+
+.badge-resolved {
+    background-color: rgba(48, 209, 88, 0.12);
+    color: #30d158;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* Card 4: SNMP neon highlight */
+.recon-card.orange-neon {
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.recon-card.orange-neon:hover {
+    border-color: #ff9500 !important;
+    box-shadow: 0 4px 20px rgba(255, 149, 0, 0.25) !important;
+    transform: translateY(-4px);
+}
+.recon-card.orange-neon .tool-icon {
+    color: #ff9500 !important;
+}
+
+/* SNMP Status Badges */
+.badge-up {
+    background-color: rgba(48, 209, 88, 0.12);
+    color: #30d158;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.badge-down {
+    background-color: rgba(255, 69, 58, 0.12);
+    color: #ff453a;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.btn-monitor {
+    background: none;
+    border: none;
+    color: #0a84ff;
+    cursor: pointer;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background var(--transition-fast);
+}
+
+.btn-monitor:hover {
+    background: rgba(10, 132, 255, 0.1);
+}
+
+.badge-neighbor {
+    background-color: rgba(10, 132, 255, 0.1);
+    color: #0a84ff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    cursor: help;
+}

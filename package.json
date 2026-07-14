@@ -1,0 +1,115 @@
+{
+  "name": "net-tools",
+  "version": "1.1.5",
+  "description": "Net Tools - 网络工具箱，SSH/串口终端、设备管理、网络测速",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "test": "playwright test",
+    "test:smoke": "playwright test tests/app-smoke.spec.js",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable --x64",
+    "build:x64": "electron-builder --win nsis --x64",
+    "build:x32": "electron-builder --win nsis --ia32",
+    "build:all": "electron-builder --win nsis:x64 nsis:ia32 portable:x64",
+    "build:dir": "electron-builder --win dir"
+  },
+  "keywords": [
+    "electron",
+    "ssh",
+    "telnet",
+    "network",
+    "remote-management"
+  ],
+  "author": "sst318304",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sst318304/Net-Tools.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sst318304/Net-Tools/issues"
+  },
+  "homepage": "https://github.com/sst318304/Net-Tools#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.15.0",
+    "@xterm/addon-unicode11": "^0.8.0",
+    "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
+    "dhcp": "^0.2.20",
+    "express": "^4.18.2",
+    "iconv-lite": "^0.7.1",
+    "net-snmp": "^3.26.3",
+    "node-schedule": "^2.1.1",
+    "serialport": "^13.0.0",
+    "ssh2": "^1.15.0",
+    "telnet-client": "^2.2.9"
+  },
+  "build": {
+    "appId": "com.nettools.app",
+    "productName": "Net Tools",
+    "publish": null,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist/**",
+      "!.git/**",
+      "!*.md",
+      "!tests/**",
+      "!playwright.config.js"
+    ],
+    "asarUnpack": [
+      "**/node_modules/serialport/**",
+      "**/node_modules/@serialport/**",
+      "**/node_modules/ssh2/**",
+      "PacketCapture/**",
+      "TsharkAnalyzer/**",
+      "styles/components/themes.css"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "include": "build/installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "${productName}-${version}-Setup-${arch}.exe",
+      "shortcutName": "Net Tools",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable.exe"
+    },
+    "asar": true,
+    "npmRebuild": false
+  }
+}

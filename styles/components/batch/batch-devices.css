@@ -1,0 +1,657 @@
+/**
+ * 批量执行 - 设备选择与筛选样式
+ */
+
+/* 执行任务卡片高度限制 */
+.batch-card-execution {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.batch-card-execution .card-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 目标选择方式卡片 */
+.batch-card-summary {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.batch-card-summary .card-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* 已选目标卡片 */
+.batch-card-targets {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.batch-card-targets .card-body {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 模式内容容器：active 时撑满 card-body */
+.batch-card-targets .target-mode-content.active {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 顶部搜索/工具栏与分组选择固定，不滚动 */
+.batch-card-targets .device-filter,
+.batch-card-targets .batch-group-select {
+    flex-shrink: 0;
+}
+
+/* 仅设备列表内部滚动 */
+.batch-card-targets .batch-device-grid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.card-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.card-body {
+    padding: 14px;
+    flex: 1;
+    overflow: auto;
+}
+
+/* 目标模式选项卡 */
+.target-mode-tabs {
+    display: flex;
+    gap: 4px;
+}
+
+.mode-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mode-tab:hover:not(.active) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.mode-tab.active {
+    background: var(--primary);
+    color: white;
+}
+
+.mode-tab.active:hover {
+    background: var(--primary-hover);
+    color: white;
+}
+
+.mode-tab svg {
+    opacity: 0.7;
+}
+
+.mode-tab.active svg {
+    opacity: 1;
+}
+
+/* 目标模式内容 */
+.target-mode-content {
+    display: none;
+}
+
+.target-mode-content.active {
+    display: block;
+}
+
+.batch-card-targets .target-mode-content.active {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 设备筛选 */
+.device-filter {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.device-filter-search {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.device-filter-search:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.1);
+}
+
+.device-filter-search svg {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.device-filter-search input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.device-filter-search input:focus {
+    outline: none;
+}
+
+.device-filter-search input::placeholder {
+    color: var(--text-muted);
+}
+
+.filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.filter-actions .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* 分组选取 */
+.batch-group-select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    flex-wrap: wrap;
+}
+
+.batch-group-select .group-select-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.batch-group-select .group-select-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+}
+
+.batch-group-select select {
+    min-width: 240px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.batch-group-select select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.1);
+}
+
+.batch-group-select .group-select-meta {
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* 设备统计 */
+.device-stats {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding-right: 10px;
+    border-right: 1px solid var(--border-color);
+}
+
+.device-stats .stats-total {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.device-stats .stats-selected {
+    color: var(--primary);
+    font-weight: 500;
+}
+
+/* 设备列表容器（仅列表视图） */
+.batch-device-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 180px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.batch-device-grid::-webkit-scrollbar {
+    display: none;
+}
+
+.batch-device-grid .batch-device-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    flex-shrink: 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+}
+
+.batch-device-grid .batch-device-item .device-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.batch-device-grid .batch-device-item .device-info {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+}
+
+.batch-device-grid .batch-device-item .device-meta {
+    margin: 0;
+}
+
+.batch-device-grid .batch-device-item .device-tags {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+/* 设备卡片 */
+.batch-device-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    flex-shrink: 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+}
+
+.batch-device-item::before {
+    content: none;
+}
+
+.batch-device-item:hover {
+    border-color: var(--border-color);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-sm);
+}
+
+.batch-device-item.selected {
+    border-color: rgba(var(--primary-rgb), 0.28);
+    background: rgba(var(--primary-rgb), 0.055);
+    box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.04);
+}
+
+.batch-device-item.selected:hover {
+    border-color: rgba(var(--primary-rgb), 0.36);
+    background: rgba(var(--primary-rgb), 0.075);
+    box-shadow: var(--shadow-sm), inset 0 0 0 1px rgba(var(--primary-rgb), 0.05);
+}
+
+.batch-device-item.selected::before {
+    content: none;
+}
+
+/* 自定义复选框 */
+.batch-device-item .device-checkbox {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.batch-device-item .device-checkbox input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.batch-device-item .checkbox-mark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+}
+
+.batch-device-item .checkbox-mark svg {
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.15s ease;
+    color: white;
+}
+
+.batch-device-item .device-checkbox input:checked + .checkbox-mark {
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: none;
+}
+
+.batch-device-item .device-checkbox input:checked + .checkbox-mark svg {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.batch-device-item:hover .checkbox-mark {
+    border-color: rgba(var(--primary-rgb), 0.5);
+}
+
+.batch-device-item.selected:hover .checkbox-mark {
+    border-color: var(--primary);
+}
+
+/* 设备图标 */
+.batch-device-item .device-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+}
+
+.batch-device-item:hover .device-icon {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.batch-device-item.selected .device-icon {
+    background: rgba(var(--primary-rgb), 0.08);
+    color: var(--primary);
+}
+
+/* 设备信息 */
+.batch-device-item .device-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.batch-device-item .device-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.batch-device-item .device-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.batch-device-item .device-host {
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+/* 设备标签 */
+.batch-device-item .device-tags {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.batch-device-item .device-protocol {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.batch-device-item .device-protocol.ssh {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.batch-device-item .device-protocol.telnet {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+}
+
+.batch-device-item .device-type-tag {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* 空状态样式 */
+.batch-device-grid .empty-state {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.batch-device-grid .empty-state svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+.batch-device-grid .empty-state .empty-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.batch-device-grid .empty-state .empty-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 搜索无结果 */
+.batch-device-grid .no-results {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    text-align: center;
+}
+
+.batch-device-grid .no-results svg {
+    width: 40px;
+    height: 40px;
+    color: var(--text-muted);
+    opacity: 0.5;
+    margin-bottom: 10px;
+}
+
+.batch-device-grid .no-results span {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .batch-device-item .device-host {
+        display: none;
+    }
+}
+
+/* ==================== 亮色主题适配 ==================== */
+
+/* 设备卡片选中状态 */
+[data-theme="light"] .batch-device-item.selected {
+    border-color: rgba(var(--primary-rgb), 0.28);
+    background: rgba(var(--primary-rgb), 0.055);
+    box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb), 0.04);
+}
+
+.batch-device-item.selected:hover {
+    border-color: rgba(var(--primary-rgb), 0.36);
+    background: rgba(var(--primary-rgb), 0.075);
+    box-shadow: var(--shadow-sm), inset 0 0 0 1px rgba(var(--primary-rgb), 0.05);
+}
+
+[data-theme="light"] .batch-device-item:hover:not(.selected) {
+    border-color: var(--border-color);
+    background: var(--bg-secondary);
+    box-shadow: var(--shadow-sm);
+}
+
+[data-theme="light"] .batch-device-item.selected:hover {
+    border-color: rgba(var(--primary-rgb), 0.36);
+    background: rgba(var(--primary-rgb), 0.075);
+    box-shadow: var(--shadow-sm), inset 0 0 0 1px rgba(var(--primary-rgb), 0.05);
+}
+
+/* 复选框样式 */
+[data-theme="light"] .batch-device-item .checkbox-mark {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .batch-device-item:hover .checkbox-mark {
+    border-color: rgba(var(--primary-rgb), 0.5);
+}
+
+.batch-device-item.selected:hover .checkbox-mark {
+    border-color: var(--primary);
+}
+
+/* 设备图标 */
+[data-theme="light"] .batch-device-item .device-icon {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .batch-device-item:hover .device-icon {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .batch-device-item.selected .device-icon {
+    background: rgba(var(--primary-rgb), 0.08);
+}
+
+/* 协议标签 */
+[data-theme="light"] .batch-device-item .device-protocol.ssh {
+    background: rgba(34, 197, 94, 0.12);
+}
+
+[data-theme="light"] .batch-device-item .device-protocol.telnet {
+    background: rgba(249, 115, 22, 0.12);
+}
+
+/* 目标模式标签 */
+[data-theme="light"] .mode-tab:hover:not(.active) {
+    background: rgba(0, 0, 0, 0.04);
+}
+

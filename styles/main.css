@@ -1,0 +1,43 @@
+/**
+ * Net Tools - 主样式入口
+ * 
+ * 所有样式已模块化拆分到 components/ 目录
+ * 
+ * 文件结构:
+ * - base.css        全局变量、重置样式
+ * - layout.css      侧边栏、主内容区域
+ * - components.css  按钮、表单、模态框、Toast等通用组件
+ * - devices.css     设备列表样式
+ * - terminal/       终端相关样式（拆分）
+ * - batch.css       批量执行
+ * - templates.css   模板管理
+ * - variables.css   变量定义
+ * - logs.css        日志管理
+ * - oplog.css       操作记录
+ * - backup.css      配置备份
+ * - nettools.css    网络工具
+ * - runtime-logs.css 运行时日志
+ */
+
+@import url('./components/base.css');
+@import url('./components/themes.css');
+@import url('./components/titlebar.css');
+@import url('./components/layout.css');
+@import url('./components/components.css');
+@import url('./components/devices.css');
+@import url('./components/terminal/terminal-dropdown.css');
+@import url('./components/terminal/terminal-history.css');
+@import url('./components/terminal/terminal-tabs.css');
+@import url('./components/terminal/terminal-xterm.css');
+@import url('./components/batch/index.css');
+@import url('./components/templates.css');
+@import url('./components/variables.css');
+@import url('./components/logs.css');
+@import url('./components/oplog.css');
+@import url('./components/backup.css');
+@import url('./components/nettools.css');
+@import url('./components/runtime-logs.css');
+@import url('./components/settings.css');
+@import url('./components/sftp.css');
+@import url('./components/editor.css');
+@import url('./components/copilot.css');

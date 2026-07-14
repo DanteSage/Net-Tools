@@ -1,0 +1,377 @@
+/**
+ * 设置页面样式
+ */
+
+/* ==================== 总体布局 ==================== */
+.settings-content {
+    display: flex;
+    padding: 0;
+    overflow: hidden;
+    height: 100%;
+}
+
+/* ==================== 左侧分类导航 ==================== */
+.settings-nav {
+    width: 200px;
+    min-width: 200px;
+    border-right: 1px solid var(--border-color);
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background-color: var(--bg-secondary);
+    overflow-y: auto;
+}
+
+.settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: all var(--transition-fast);
+}
+
+.settings-nav-item:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.settings-nav-item.active {
+    background-color: var(--primary-color);
+    color: #ffffff;
+}
+
+.settings-nav-item svg {
+    flex-shrink: 0;
+    opacity: 0.9;
+}
+
+/* ==================== 右侧内容区 ==================== */
+.settings-main {
+    flex: 1;
+    padding: 24px 28px;
+    overflow-y: auto;
+}
+
+.settings-section {
+    display: none;
+    animation: settingsFadeIn 0.18s ease;
+}
+
+.settings-section.active {
+    display: block;
+}
+
+@keyframes settingsFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==================== 卡片 ==================== */
+.settings-card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 20px 22px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+/* ==================== 行 ==================== */
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.settings-row-compact {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.settings-row-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-row-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.settings-row-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.settings-row-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+/* ==================== 提示文字 ==================== */
+.settings-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+/* ==================== 徽标 ==================== */
+.settings-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 999px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.settings-badge.on {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: var(--success-color);
+}
+
+.settings-badge.off {
+    background-color: rgba(148, 163, 184, 0.15);
+    color: var(--text-muted);
+}
+
+/* ==================== 主题卡片网格 ==================== */
+.theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+}
+
+.theme-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    background-color: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-align: left;
+    font-family: inherit;
+    overflow: hidden;
+}
+
+.theme-card:hover {
+    border-color: var(--border-light);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.theme-card.active {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.18);
+}
+
+/* 主题预览（迷你 IDE） */
+.theme-card-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.theme-card-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    height: 18px;
+    box-sizing: border-box;
+}
+
+.theme-card-bar span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    opacity: 0.85;
+}
+
+.theme-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 12px;
+}
+
+.theme-card-line {
+    height: 4px;
+    border-radius: 2px;
+    opacity: 0.7;
+}
+
+/* 卡片元信息 */
+.theme-card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 4px 4px;
+}
+
+.theme-card-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.theme-card-mode {
+    font-size: 10px;
+    color: var(--text-muted);
+    padding: 1px 6px;
+    background-color: var(--bg-tertiary);
+    border-radius: 999px;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+
+.theme-card.active .theme-card-name {
+    color: var(--primary-color);
+}
+
+/* ==================== 路径选择 ==================== */
+.settings-path-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-path-input {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 13px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-family: ui-monospace, Consolas, monospace;
+    cursor: default;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ==================== 开关（Switch） ==================== */
+.settings-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.settings-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.settings-switch-slider {
+    position: absolute;
+    inset: 0;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.settings-switch-slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-sm);
+}
+
+.settings-switch input:checked + .settings-switch-slider {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.settings-switch input:checked + .settings-switch-slider::before {
+    transform: translateX(18px);
+}
+
+/* ==================== 关于卡片 ==================== */
+.settings-about-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.settings-about-brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.settings-about-logo {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--primary-color), #6366f1);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+}
+
+.settings-about-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-about-version {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.settings-about-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}

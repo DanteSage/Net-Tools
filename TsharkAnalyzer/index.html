@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TsharkAnalyzer - AI 智能网络分析</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        /* ==================== CSS 变量 & 主题 ==================== */
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #0f1117); 
+            --bg2: var(--bg-secondary, #1a1b2e); 
+            --bg3: var(--bg-tertiary, #1e2035); 
+            --bg4: var(--bg-card, #252640);
+            --text: var(--text-primary, #e2e8f0); 
+            --text2: var(--text-secondary, #94a3b8); 
+            --text3: var(--text-muted, #64748b);
+            --border: var(--border-color, rgba(255,255,255,0.08)); 
+            --border2: var(--border-light, rgba(255,255,255,0.14));
+            --primary: var(--primary-color, #3b82f6); 
+            --primary-dim: rgba(59,130,246,0.15);
+            --success: var(--success-color, #10b981); 
+            --warning: var(--warning-color, #f59e0b); 
+            --danger: var(--danger-color, #ef4444);
+            --critical: #dc2626; --high: #ea580c; --medium: #ca8a04; --low: #16a34a;
+            --row-hover: rgba(255,255,255,0.04); --row-sel: rgba(59,130,246,0.18);
+            --scrollbar: rgba(255,255,255,0.12);
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+            --radius: 8px; --transition: 0.18s ease;
+        }
+        :root.light {
+            --bg: var(--bg-primary, #f0f2f5); 
+            --bg2: var(--bg-secondary, #ffffff); 
+            --bg3: var(--bg-tertiary, #f8fafc); 
+            --bg4: var(--bg-card, #eef1f6);
+            --text: var(--text-primary, #1e293b); 
+            --text-secondary: #475569; /* mapping override for details */
+            --text2: var(--text-secondary, #475569); 
+            --text3: var(--text-muted, #94a3b8);
+            --border: var(--border-color, rgba(0,0,0,0.08)); 
+            --border2: var(--border-light, rgba(0,0,0,0.14));
+            --primary: var(--primary-color, #2563eb); 
+            --primary-dim: rgba(37,99,235,0.1);
+            --row-hover: rgba(0,0,0,0.03); --row-sel: rgba(37,99,235,0.1);
+            --scrollbar: rgba(0,0,0,0.15);
+            --shadow: 0 4px 24px rgba(0,0,0,0.1);
+        }
+
+        /* ==================== 基础重置 ==================== */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            font-size: 13px; background: var(--bg); color: var(--text);
+            display: flex; flex-direction: column;
+            padding-top: 32px; /* 为原生标题栏留空间 */
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+        button { font-family: inherit; cursor: pointer; }
+        input, select { font-family: inherit; color: var(--text); }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+
+        /* ==================== 工具栏 ==================== */
+        .toolbar {
+            flex-shrink: 0; height: 50px; background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 8px;
+            padding: 0 12px; user-select: none;
+        }
+        .toolbar-divider { width: 1px; height: 22px; background: var(--border2); margin: 0 4px; }
+        .btn {
+            display: flex; align-items: center; gap: 5px;
+            padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border2);
+            background: var(--bg4); color: var(--text); font-size: 12.5px;
+            transition: all var(--transition); white-space: nowrap;
+        }
+        .btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .btn-primary:hover:not(:disabled) { opacity: 0.88; color: #fff; }
+        .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+        .btn-danger:hover:not(:disabled) { opacity: 0.88; color: #fff; }
+        .btn-ai {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-color: transparent; color: #fff; padding: 5px 14px;
+        }
+        .btn-ai:hover:not(:disabled) { opacity: 0.88; color: #fff; }
+        .btn-ai:disabled { background: var(--bg4); color: var(--text3); border-color: var(--border2); }
+        .model-badge {
+            font-size: 11px; padding: 3px 8px; border-radius: 10px;
+            background: rgba(139,92,246,0.12); color: #a78bfa;
+            border: 1px solid rgba(139,92,246,0.25);
+            white-space: nowrap; max-width: 140px;
+            overflow: hidden; text-overflow: ellipsis;
+            cursor: pointer; transition: all var(--transition);
+        }
+        .model-badge:hover { background: rgba(139,92,246,0.22); border-color: rgba(139,92,246,0.5); }
+        .model-badge.unconfigured { color: var(--text3); background: var(--bg4); border-color: var(--border); }
+        .toolbar-filter {
+            flex: 1; max-width: 280px;
+            display: flex; align-items: center; gap: 6px;
+            background: var(--bg3); border: 1px solid var(--border2);
+            border-radius: 6px; padding: 0 10px; height: 30px;
+        }
+        .toolbar-filter input {
+            flex: 1; background: transparent; border: none; outline: none;
+            font-size: 12.5px; color: var(--text);
+        }
+        .toolbar-filter input::placeholder { color: var(--text3); }
+        .toolbar-filter svg { flex-shrink: 0; color: var(--text3); }
+        .toolbar-filter input.filter-valid { color: #22c55e; }
+        .toolbar-filter:has(input.filter-valid) { border-color: rgba(34,197,94,0.5); background: rgba(34,197,94,0.06); }
+        .toolbar-filter input.filter-fallback { color: #f59e0b; }
+        .toolbar-filter:has(input.filter-fallback) { border-color: rgba(245,158,11,0.5); background: rgba(245,158,11,0.06); }
+        .toolbar-select {
+            height: 30px; padding: 0 8px; border-radius: 6px;
+            border: 1px solid var(--border2); background: var(--bg3);
+            color: var(--text); font-size: 12.5px; outline: none;
+        }
+        .status-pill {
+            font-size: 11.5px; padding: 3px 10px; border-radius: 12px;
+            background: var(--bg4); border: 1px solid var(--border);
+            color: var(--text3); white-space: nowrap;
+        }
+        .status-pill.ready { color: var(--success); border-color: rgba(16,185,129,0.3); }
+        .status-pill.error { color: var(--danger); border-color: rgba(239,68,68,0.3); }
+        .status-pill.capturing {
+            color: var(--primary); border-color: rgba(59,130,246,0.3);
+            animation: pulse-border 1.5s infinite;
+        }
+        @keyframes pulse-border { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
+
+        /* ==================== 主内容区 ==================== */
+        .main-area {
+            flex: 1; display: flex; overflow: hidden; gap: 0;
+        }
+
+        /* ==================== 数据包列表面板 ==================== */
+        .packet-panel {
+            flex: 1; display: flex; flex-direction: column;
+            border-right: 1px solid var(--border); min-width: 0;
+        }
+        .panel-header {
+            height: 34px; padding: 0 12px;
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--bg3); border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .panel-title { font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 0.5px; }
+        .panel-count { font-size: 11.5px; color: var(--text3); }
+
+        /* 表头 */
+        .pkt-thead {
+            display: grid;
+            grid-template-columns: 55px 90px 130px 130px 80px 60px 1fr;
+            padding: 0 12px; height: 30px;
+            background: var(--bg3); border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .pkt-th {
+            display: flex; align-items: center;
+            font-size: 11.5px; color: var(--text3); font-weight: 600;
+            letter-spacing: 0.3px; cursor: pointer; user-select: none;
+        }
+        .pkt-th:hover { color: var(--text); }
+
+        /* 虚拟列表容器 */
+        .vlist-container { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
+        .vlist-spacer { position: absolute; top: 0; left: 0; width: 1px; pointer-events: none; }
+        .vlist-rows { position: absolute; top: 0; left: 0; right: 0; }
+
+        .pkt-row {
+            display: grid;
+            grid-template-columns: 55px 90px 130px 130px 80px 60px 1fr;
+            padding: 0 12px; height: 26px; align-items: center;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer; transition: background var(--transition);
+        }
+        .pkt-row:hover { background: var(--row-hover); }
+        .pkt-row.selected { background: var(--row-sel); }
+        .pkt-row.retrans  { background: rgba(234,179,8,0.06); }
+        .pkt-row.rst      { background: rgba(239,68,68,0.07); }
+        .pkt-row.row-warn { background: rgba(249,115,22,0.07); }
+        .pkt-cell {
+            font-size: 12px; color: var(--text); overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; padding-right: 8px;
+        }
+        .pkt-cell.no { color: var(--text3); font-variant-numeric: tabular-nums; }
+        .pkt-cell.time { color: var(--text3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+        .proto-badge {
+            display: inline-block; font-size: 10.5px; padding: 1px 6px;
+            border-radius: 4px; font-weight: 600; letter-spacing: 0.3px;
+        }
+        .proto-TCP    { background: rgba(59,130,246,0.18); color: #60a5fa; }
+        .proto-UDP    { background: rgba(16,185,129,0.18); color: #34d399; }
+        .proto-DNS    { background: rgba(139,92,246,0.18); color: #a78bfa; }
+        .proto-ICMP   { background: rgba(245,158,11,0.18); color: #fbbf24; }
+        .proto-TLS    { background: rgba(236,72,153,0.18); color: #f472b6; }
+        .proto-HTTP   { background: rgba(249,115,22,0.18); color: #fb923c; }
+        .proto-ARP     { background: rgba(20,184,166,0.18);  color: #2dd4bf; }
+        .proto-IGMP    { background: rgba(234,179,8,0.18);   color: #facc15; }
+        .proto-ROUTING { background: rgba(168,85,247,0.18);  color: #c084fc; }
+        .proto-TUNNEL  { background: rgba(99,102,241,0.18);  color: #818cf8; }
+        .proto-SCTP    { background: rgba(6,182,212,0.18);   color: #22d3ee; }
+        .proto-other   { background: rgba(100,116,139,0.18); color: #94a3b8; }
+        .pkt-cell.len { color: var(--text3); font-size: 11.5px; }
+
+        /* 空状态 */
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; gap: 10px; color: var(--text3);
+        }
+        .empty-state svg { opacity: 0.3; }
+        .empty-state p { font-size: 13px; }
+        .empty-state span { font-size: 11.5px; opacity: 0.7; }
+
+        /* ==================== 右侧分析面板 ==================== */
+        .analysis-panel {
+            width: 360px; flex-shrink: 0;
+            display: flex; flex-direction: column; background: var(--bg2);
+        }
+        .tab-bar {
+            display: flex; border-bottom: 1px solid var(--border);
+            background: var(--bg3); flex-shrink: 0;
+        }
+        .tab-btn {
+            flex: 1; height: 38px; border: none; background: transparent;
+            color: var(--text3); font-size: 12.5px; font-weight: 500;
+            border-bottom: 2px solid transparent; transition: all var(--transition);
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+        }
+        .tab-btn:hover { color: var(--text); background: var(--row-hover); }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .tab-content { flex: 1; overflow-y: auto; overflow-x: hidden; }
+        .tab-pane { display: none; padding: 12px; }
+        .tab-pane.active { display: block; }
+
+        /* ==================== 统计面板 ==================== */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .stat-card {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 12px;
+        }
+        .stat-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+        .stat-value { font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+        .stat-value.blue { color: var(--primary); }
+        .stat-value.green { color: var(--success); }
+        .stat-value.red { color: var(--danger); }
+        .stat-value.yellow { color: var(--warning); }
+        .section-title { font-size: 11.5px; font-weight: 600; color: var(--text3); letter-spacing: 0.5px; margin-bottom: 8px; }
+        .proto-bars { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+        .proto-bar-row { display: flex; align-items: center; gap: 8px; }
+        .proto-bar-name { font-size: 11.5px; color: var(--text2); width: 52px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; }
+        .proto-bar-track { flex: 1; height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+        .proto-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; background: var(--primary); }
+        .proto-bar-pct { font-size: 11px; color: var(--text3); width: 36px; text-align: right; }
+        .top-ip-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+        .top-ip-item { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; background: var(--bg3); border-radius: 5px; }
+        .top-ip-addr { font-size: 11.5px; color: var(--text); font-family: 'Consolas', monospace; }
+        .top-ip-count { font-size: 11px; color: var(--text3); }
+
+        /* ==================== AI 诊断面板 ==================== */
+        .ai-panel { padding: 12px; }
+        /* 初始引导状态 */
+        .ai-guide {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 32px 16px; gap: 12px; text-align: center;
+        }
+        .ai-guide-icon {
+            width: 56px; height: 56px; border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .ai-guide h3 { font-size: 15px; color: var(--text); }
+        .ai-guide p { font-size: 12.5px; color: var(--text3); line-height: 1.6; }
+        .ai-guide .btn-ai { margin-top: 8px; padding: 8px 20px; font-size: 13px; }
+
+        /* 加载状态 */
+        .ai-loading { display: none; flex-direction: column; align-items: center; padding: 32px 16px; gap: 14px; }
+        .ai-loading.show { display: flex; }
+        .ai-spinner {
+            width: 48px; height: 48px; border-radius: 50%;
+            border: 3px solid var(--border2);
+            border-top-color: var(--primary);
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .ai-loading-text { font-size: 13px; color: var(--text2); }
+        .ai-loading-sub { font-size: 11.5px; color: var(--text3); text-align: center; }
+        .ai-loading-steps { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 220px; }
+        .ai-step {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 11.5px; color: var(--text3);
+        }
+        .ai-step.done { color: var(--success); }
+        .ai-step.active { color: var(--primary); }
+        .ai-step-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+        /* 加载摘要卡片 */
+        .ai-loading-summary {
+            width: 100%; max-width: 300px; margin-top: 8px;
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 14px;
+        }
+        .ai-summary-title {
+            font-size: 11px; color: var(--text3); margin-bottom: 6px;
+            display: flex; align-items: center; gap: 4px;
+        }
+        .ai-summary-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
+        }
+        .ai-summary-item { display: flex; justify-content: space-between; }
+        .ai-summary-label { font-size: 11.5px; color: var(--text3); }
+        .ai-summary-val { font-size: 11.5px; color: var(--text); font-weight: 600; font-family: 'Consolas', monospace; }
+
+        /* 诊断结果 */
+        .ai-result { display: none; animation: fadeSlideIn 0.35s ease; }
+        .ai-result.show { display: block; }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        /* AI 面板内容滚动 */
+        #tab-ai { overflow-y: auto; }
+        /* section 标题带图标 */
+        .section-title {
+            display: flex; align-items: center; gap: 5px;
+        }
+        .section-title::before {
+            content: ''; width: 3px; height: 12px; border-radius: 2px;
+            background: var(--primary); flex-shrink: 0;
+        }
+
+        /* 健康评分 */
+        .health-score-card {
+            background: linear-gradient(135deg, var(--bg3), var(--bg4));
+            border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px; margin-bottom: 10px;
+            display: flex; align-items: center; gap: 14px;
+        }
+        .score-ring-wrap { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
+        .score-ring {
+            transform: rotate(-90deg); position: absolute; top: 0; left: 0;
+        }
+        .score-ring-bg { fill: none; stroke: var(--border2); stroke-width: 6; }
+        .score-ring-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+        .score-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 16px; font-weight: 700; color: var(--text);
+        }
+        .score-info h4 { font-size: 13.5px; color: var(--text); margin-bottom: 4px; }
+        .score-info p { font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+        /* 故障清单 */
+        .issues-section { margin-bottom: 10px; }
+        .issue-item {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px;
+        }
+        .issue-header { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+        .issue-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+        .severity-badge {
+            font-size: 10.5px; padding: 1px 7px; border-radius: 10px; font-weight: 600; flex-shrink: 0;
+        }
+        .severity-critical { background: rgba(220,38,38,0.2); color: #fca5a5; }
+        .severity-high { background: rgba(234,88,12,0.2); color: #fdba74; }
+        .severity-medium { background: rgba(202,138,4,0.2); color: #fde047; }
+        .severity-low { background: rgba(22,163,74,0.2); color: #86efac; }
+        .issue-desc { font-size: 12px; color: var(--text); line-height: 1.6; }
+        .issue-evidence { font-size: 11.5px; color: var(--text2); margin-top: 4px; font-style: italic; }
+
+        /* 严重程度分布 */
+        .severity-dist { margin-bottom: 10px; }
+        .sev-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+        .sev-label { font-size: 11.5px; width: 42px; flex-shrink: 0; }
+        .sev-label.critical { color: #fca5a5; }
+        .sev-label.high { color: #fdba74; }
+        .sev-label.medium { color: #fde047; }
+        .sev-label.low { color: #86efac; }
+        .sev-bar-track { flex: 1; height: 8px; background: var(--bg4); border-radius: 4px; overflow: hidden; }
+        .sev-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+        .sev-bar-fill.critical { background: var(--critical); }
+        .sev-bar-fill.high { background: var(--high); }
+        .sev-bar-fill.medium { background: var(--medium); }
+        .sev-bar-fill.low { background: var(--low); }
+        .sev-count { font-size: 12px; color: var(--text2); width: 18px; text-align: right; font-weight: 600; }
+
+        /* 修复建议 */
+        .rec-item {
+            background: var(--bg3); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 10px 12px; margin-bottom: 6px;
+        }
+        .rec-header { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+        .rec-priority-badge {
+            font-size: 10.5px; padding: 1px 6px; border-radius: 10px; font-weight: 600;
+        }
+        .rec-priority-high { background: rgba(239,68,68,0.18); color: #fca5a5; }
+        .rec-priority-medium { background: rgba(245,158,11,0.18); color: #fcd34d; }
+        .rec-priority-low { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+        .rec-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+        .rec-action { font-size: 12px; color: var(--text); line-height: 1.6; }
+        .rec-step { padding: 2px 0; line-height: 1.65; }
+        .rec-step + .rec-step { border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px; }
+        .rec-effect { font-size: 11px; color: var(--success); margin-top: 4px; }
+
+        /* 总体结论 */
+        .diag-conclusion { margin-bottom: 8px; }
+        .conclusion-banner {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px; border-radius: 7px; margin-bottom: 6px;
+            font-size: 13px; font-weight: 700;
+        }
+        .conclusion-ok   { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+        .conclusion-warn { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+        .conclusion-crit { background: rgba(239,68,68,0.15);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+        .conclusion-icon { font-size: 15px; }
+        .conclusion-label { font-size: 13px; font-weight: 700; }
+        .conclusion-text { font-size: 12.5px; color: var(--text); line-height: 1.65; padding: 0 2px; }
+
+        /* 维度评分 */
+        .diag-dims-wrap { margin-bottom: 10px; }
+        .diag-dimensions { display: flex; flex-direction: column; gap: 5px; }
+        .dim-item { margin-bottom: 1px; }
+        .dim-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+        .dim-name { font-size: 12px; color: var(--text); }
+        .dim-score { font-size: 12px; font-weight: 700; }
+        .dim-bar-track { height: 4px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+        .dim-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+        /* issue 实测 vs 阈值 */
+        .issue-metrics { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+        .metric-val { font-size: 12px; padding: 2px 7px; border-radius: 4px; background: rgba(239,68,68,0.18); color: #fca5a5; font-family: 'Consolas', monospace; font-weight: 600; }
+        .metric-threshold { font-size: 12px; padding: 2px 7px; border-radius: 4px; background: rgba(16,185,129,0.18); color: #6ee7b7; font-family: 'Consolas', monospace; font-weight: 600; }
+
+        /* 导出按钮区 */
+        .export-bar {
+            display: flex; gap: 7px; margin-top: 12px; padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+        .export-bar .btn { flex: 1; justify-content: center; font-size: 12px; }
+
+        /* ==================== 导出下拉菜单 ==================== */
+        .export-dropdown { position: relative; }
+        .export-dropdown-menu {
+            display: none; position: absolute; top: calc(100% + 4px); left: 0;
+            background: var(--bg2); border: 1px solid var(--border2);
+            border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            z-index: 100; min-width: 160px; padding: 4px;
+        }
+        .export-dropdown.open .export-dropdown-menu { display: block; }
+        .export-menu-item {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            padding: 7px 10px; border: none; background: transparent;
+            color: var(--text2); font-size: 12.5px; cursor: pointer;
+            border-radius: 5px; text-align: left; transition: all var(--transition);
+        }
+        .export-menu-item:hover { background: var(--bg4); color: var(--text); }
+        .export-menu-tip {
+            margin-left: auto; font-size: 10px; color: var(--text3);
+            background: var(--bg3); padding: 1px 5px; border-radius: 3px;
+        }
+        .export-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+        /* ==================== 底部详情栏 ==================== */
+        .detail-bar {
+            height: 30px; background: var(--bg3); border-top: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 12px; gap: 16px;
+            flex-shrink: 0; cursor: pointer; user-select: none;
+        }
+        .detail-bar:hover { background: var(--bg4); }
+        .detail-bar-title { font-size: 11.5px; color: var(--text3); font-weight: 600; }
+        .detail-bar span { font-size: 11.5px; color: var(--text2); }
+        .detail-bar-arrow { margin-left: auto; color: var(--text3); transition: transform var(--transition); }
+        .detail-bar-arrow.open { transform: rotate(180deg); }
+        .detail-content {
+            max-height: 0; overflow: hidden; transition: max-height 0.25s ease;
+            background: var(--bg2); border-top: 1px solid var(--border);
+        }
+        .detail-content.open { max-height: 280px; overflow-y: auto; }
+        .detail-inner { padding: 4px 0 6px; }
+
+        /* ==================== Wireshark 风格树形详情 ==================== */
+        .pkt-tree { font-family: 'Consolas', monospace; font-size: 12px; }
+        .pkt-tree-node { border: none; background: transparent; }
+        .pkt-tree-node > summary {
+            display: flex; align-items: center; gap: 5px;
+            padding: 2px 10px 2px 10px; cursor: pointer; list-style: none;
+            user-select: none; border-radius: 2px; font-weight: 600; font-size: 12px;
+            color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pkt-tree-node > summary:hover { background: var(--bg4); }
+        .pkt-tree-node > summary::before {
+            content: '▶'; font-size: 9px; color: var(--text3);
+            flex-shrink: 0; width: 10px; transition: transform 0.12s;
+        }
+        .pkt-tree-node[open] > summary::before { transform: rotate(90deg); }
+        .pkt-tree-node > summary::-webkit-details-marker { display: none; }
+        .pkt-tree-children { padding-left: 22px; }
+        .pkt-tree-leaf {
+            display: flex; gap: 6px; padding: 1px 8px;
+            border-radius: 2px; align-items: baseline;
+        }
+        .pkt-tree-leaf:hover { background: var(--bg4); }
+        .pkt-tree-key { color: var(--text3); font-size: 11.5px; flex-shrink: 0; white-space: nowrap; }
+        .pkt-tree-val { color: var(--text); font-size: 12px; word-break: break-all; }
+        .pkt-tree-val.hi-warn { color: var(--warning); font-weight: 600; }
+        .pkt-tree-val.hi-danger { color: var(--danger); font-weight: 600; }
+        .pkt-tree-val.hi-ok { color: var(--success); }
+        .pkt-tree-val.hi-muted { color: var(--text3); }
+        /* 各层标题颜色 */
+        .node-frame > summary  { color: var(--text2); }
+        .node-eth > summary    { color: #94a3b8; }
+        .node-ip > summary     { color: #a78bfa; }
+        .node-tcp > summary    { color: #60a5fa; }
+        .node-udp > summary    { color: #34d399; }
+        .node-icmp > summary   { color: #f87171; }
+        .node-icmpv6 > summary { color: #fb923c; }
+        .node-arp > summary    { color: #2dd4bf; }
+        .node-dns > summary    { color: #fbbf24; }
+        .node-http > summary   { color: #4ade80; }
+        .node-tls > summary    { color: #e879f9; }
+
+        /* ==================== 设置面板（居中弹窗） ==================== */
+        .settings-overlay {
+            display: none; position: fixed; inset: 0; z-index: 100;
+            background: rgba(0,0,0,0.55);
+            align-items: center; justify-content: center;
+        }
+        .settings-overlay.show { display: flex; }
+        .settings-drawer {
+            width: 420px; max-height: 82vh;
+            background: var(--bg2); border: 1px solid var(--border2);
+            border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+            overflow-y: auto; padding: 20px 22px;
+            transform: scale(0.95); opacity: 0;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+        .settings-overlay.show .settings-drawer { transform: scale(1); opacity: 1; }
+        .settings-drawer-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .settings-drawer h3 { font-size: 14px; font-weight: 600; color: var(--text); margin: 0; }
+        .settings-close-btn {
+            width: 26px; height: 26px; border-radius: 6px; border: none;
+            background: var(--bg4); color: var(--text3); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all var(--transition);
+        }
+        .settings-close-btn:hover { background: var(--danger); color: #fff; }
+        .field-group { margin-bottom: 12px; }
+        .field-label { font-size: 11.5px; color: var(--text3); margin-bottom: 5px; display: block; }
+        .field-input {
+            width: 100%; padding: 7px 10px; background: var(--bg3);
+            border: 1px solid var(--border2); border-radius: 6px;
+            color: var(--text); font-size: 12.5px; outline: none;
+            transition: border-color var(--transition);
+        }
+        .field-input:focus { border-color: var(--primary); }
+        .settings-section-title {
+            font-size: 11px; color: var(--text3); font-weight: 600;
+            letter-spacing: 0.8px; margin: 14px 0 8px; text-transform: uppercase;
+        }
+        .settings-tip { font-size: 11px; color: var(--text3); line-height: 1.6; margin-bottom: 10px; }
+        .settings-tip a { color: var(--primary); cursor: pointer; }
+        .settings-actions { display: flex; gap: 8px; margin-top: 14px; }
+        .settings-actions .btn { flex: 1; justify-content: center; }
+        .preset-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+        .preset-btn {
+            font-size: 11.5px; padding: 4px 10px; border-radius: 5px;
+            border: 1px solid var(--border2); background: var(--bg4); color: var(--text2);
+            cursor: pointer; transition: all var(--transition);
+        }
+        .preset-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
+        .preset-btn.active { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); font-weight: 600; }
+        .tshark-env-card {
+            background: var(--bg3); border: 1px solid var(--border2);
+            border-radius: 8px; padding: 10px 12px; margin-bottom: 10px;
+        }
+        .tshark-env-status { display: flex; align-items: center; gap: 10px; }
+        .env-icon {
+            width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 700;
+        }
+        .env-icon.unknown { background: var(--bg4); color: var(--text3); }
+        .env-icon.ok { background: rgba(16,185,129,0.18); color: var(--success); }
+        .env-icon.fail { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .env-icon.checking { background: rgba(59,130,246,0.15); color: var(--primary); animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .env-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+        .env-detail { font-size: 11px; color: var(--text3); margin-top: 1px; }
+        .env-version { font-size: 11px; color: var(--success); margin-top: 1px; font-family: monospace; }
+        .env-warn { font-size: 11px; color: var(--warning); margin-top: 3px; line-height: 1.5; }
+        .env-warn.critical { color: var(--danger); }
+        .path-row { display: flex; gap: 6px; align-items: center; }
+        .path-row .field-input { flex: 1; }
+        .btn-sm { padding: 5px 10px; font-size: 11.5px; white-space: nowrap; flex-shrink: 0; }
+        .tshark-actions { display: flex; gap: 6px; margin-top: 8px; }
+        .tshark-actions .btn { flex: 1; justify-content: center; font-size: 11.5px; padding: 5px 8px; }
+
+        /* ==================== 数据包详情弹窗 ==================== */
+        .pkt-modal-overlay {
+            display: none; position: fixed; inset: 0; z-index: 300;
+            background: rgba(0,0,0,0.62);
+            align-items: center; justify-content: center;
+        }
+        .pkt-modal-overlay.show { display: flex; }
+        .pkt-modal {
+            width: 620px; max-height: 78vh; min-height: 280px;
+            background: var(--bg2); border: 1px solid var(--border2);
+            border-radius: 10px; box-shadow: 0 16px 56px rgba(0,0,0,0.65);
+            display: flex; flex-direction: column;
+            transform: scale(0.96); opacity: 0;
+            transition: transform 0.16s ease, opacity 0.16s ease;
+        }
+        .pkt-modal-overlay.show .pkt-modal { transform: scale(1); opacity: 1; }
+        .pkt-modal-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 14px; border-bottom: 1px solid var(--border);
+            flex-shrink: 0; background: var(--bg3); border-radius: 10px 10px 0 0;
+        }
+        .pkt-modal-icon { color: var(--primary); flex-shrink: 0; }
+        .pkt-modal-title {
+            flex: 1; font-size: 11.5px; font-weight: 600; color: var(--text);
+            font-family: 'Consolas', monospace;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pkt-modal-close {
+            width: 24px; height: 24px; border-radius: 5px; border: none;
+            background: transparent; color: var(--text3); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all var(--transition); flex-shrink: 0;
+        }
+        .pkt-modal-close:hover { background: var(--danger); color: #fff; }
+        .pkt-modal-body { flex: 1; overflow-y: auto; padding: 6px 0 10px; }
+        .pkt-modal-hint {
+            text-align: center; font-size: 11px; color: var(--text3);
+            padding: 4px 0 0; border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        /* ==================== Toast 提示 ==================== */
+        .toast-container { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+        .toast {
+            padding: 8px 16px; border-radius: 7px; font-size: 12.5px;
+            color: #fff; animation: toast-in 0.2s ease;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35); pointer-events: auto;
+        }
+        .toast.success { background: rgba(16,185,129,0.92); }
+        .toast.error { background: rgba(239,68,68,0.92); }
+        .toast.info { background: rgba(59,130,246,0.92); }
+        @keyframes toast-in { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform:none; } }
+
+        /* ==================== 无内容提示 ==================== */
+        .no-issues { text-align: center; padding: 20px; color: var(--text3); font-size: 12.5px; }
+    </style>
+</head>
+<body>
+    <!-- ==================== 工具栏 ==================== -->
+    <div class="toolbar">
+        <button class="btn btn-primary" id="btn-start" disabled>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            开始
+        </button>
+        <button class="btn btn-danger" id="btn-stop" disabled>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16"/></svg>
+            停止
+        </button>
+        <button class="btn" id="btn-clear" disabled>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+            清除
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <button class="btn" id="btn-import">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            导入 PCAP
+        </button>
+
+        <!-- 导出下拉菜单 -->
+        <div class="export-dropdown" id="export-dropdown">
+            <button class="btn" id="btn-export-packets" disabled>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                导出
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="export-dropdown-menu" id="export-dropdown-menu">
+                <button class="export-menu-item" id="btn-export-csv">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    导出为 CSV
+                </button>
+                <button class="export-menu-item" id="btn-export-json">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    导出为 JSON
+                </button>
+                <div class="export-menu-divider"></div>
+                <button class="export-menu-item" id="btn-export-pcap">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                    导出为 PCAP
+                    <span class="export-menu-tip">实时抓包可用</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <label style="font-size:12px; color:var(--text3);">接口</label>
+        <select class="toolbar-select" id="interface-select" style="min-width:160px;">
+            <option value="">-- 加载中 --</option>
+        </select>
+
+        <div class="toolbar-filter">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" id="display-filter" placeholder="过滤器: tcp | ip.src==192.168.1.0/24 | dns and !arp | frame.len>1000" autocomplete="off" spellcheck="false">
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <button class="btn btn-ai" id="btn-ai-diagnose" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2zm0 4a1 1 0 00-1 1v4.586l-2.707 2.707a1 1 0 001.414 1.414L12 13.414l2.293 2.293a1 1 0 001.414-1.414L13 11.586V7a1 1 0 00-1-1z"/></svg>
+            AI 智能诊断
+        </button>
+        <span class="model-badge unconfigured" id="model-badge" title="点击配置 AI 模型">未配置模型</span>
+
+        <button class="btn" id="btn-settings" style="margin-left:auto;" title="API 设置">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+
+        <span class="status-pill" id="tshark-status">检测中...</span>
+    </div>
+
+    <!-- ==================== 主内容区 ==================== -->
+    <div class="main-area">
+
+        <!-- 数据包列表面板 -->
+        <div class="packet-panel">
+            <div class="panel-header">
+                <span class="panel-title">数据包列表</span>
+                <span class="panel-count" id="pkt-count">共 0 个包 · 显示 0</span>
+            </div>
+
+            <!-- 表头 -->
+            <div class="pkt-thead">
+                <span class="pkt-th">No.</span>
+                <span class="pkt-th">时间(s)</span>
+                <span class="pkt-th">源地址</span>
+                <span class="pkt-th">目标地址</span>
+                <span class="pkt-th">协议</span>
+                <span class="pkt-th">长度</span>
+                <span class="pkt-th">信息</span>
+            </div>
+
+            <!-- 虚拟列表 -->
+            <div class="vlist-container" id="vlist-container">
+                <div class="vlist-spacer" id="vlist-spacer"></div>
+                <div class="vlist-rows" id="vlist-rows"></div>
+                <div class="empty-state" id="empty-state">
+                    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                    </svg>
+                    <p>暂无数据包</p>
+                    <span>点击"开始"捕获流量，或导入 PCAP 文件分析</span>
+                </div>
+            </div>
+
+            <!-- 底部数据包详情折叠栏（仅在列表面板内） -->
+            <div class="detail-bar" id="detail-bar">
+                <span class="detail-bar-title">数据包详情</span>
+                <span id="detail-summary" style="color:var(--text3);font-size:11.5px;">选择一个数据包查看详情</span>
+                <svg class="detail-bar-arrow" id="detail-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+            </div>
+            <div class="detail-content" id="detail-content">
+                <div class="detail-inner" id="detail-inner">
+                    <span style="color:var(--text3);font-size:12px;">暂无选中数据包</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧分析面板 -->
+        <div class="analysis-panel">
+            <div class="tab-bar">
+                <button class="tab-btn active" data-tab="stats">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                    统计
+                </button>
+                <button class="tab-btn" data-tab="ai">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+                    AI 诊断
+                </button>
+            </div>
+
+            <div class="tab-content">
+                <!-- 统计标签页 -->
+                <div class="tab-pane active" id="tab-stats">
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-label">数据包总数</div><div class="stat-value blue" id="s-total">0</div></div>
+                        <div class="stat-card"><div class="stat-label">总流量</div><div class="stat-value" id="s-bytes">0 B</div></div>
+                        <div class="stat-card"><div class="stat-label">TCP 重传</div><div class="stat-value yellow" id="s-retrans">0</div></div>
+                        <div class="stat-card"><div class="stat-label">TCP RST</div><div class="stat-value red" id="s-rsts">0</div></div>
+                        <div class="stat-card"><div class="stat-label">平均 RTT</div><div class="stat-value green" id="s-rtt">--</div></div>
+                        <div class="stat-card"><div class="stat-label">乱序包</div><div class="stat-value yellow" id="s-ooo">0</div></div>
+                        <div class="stat-card"><div class="stat-label">重复 ACK</div><div class="stat-value yellow" id="s-dup-ack">0</div></div>
+                        <div class="stat-card"><div class="stat-label">DNS 失败</div><div class="stat-value red" id="s-dns-err">0</div></div>
+                        <div class="stat-card"><div class="stat-label">ICMP 不可达</div><div class="stat-value red" id="s-icmp-unr">0</div></div>
+                        <div class="stat-card"><div class="stat-label">HTTP 错误</div><div class="stat-value red" id="s-http-err">0</div></div>
+                        <div class="stat-card"><div class="stat-label">TLS Alert</div><div class="stat-value red" id="s-tls-alert">0</div></div>
+                    </div>
+
+                    <div class="section-title">协议分布</div>
+                    <div class="proto-bars" id="proto-bars">
+                        <div style="color:var(--text3);font-size:11.5px;">暂无数据</div>
+                    </div>
+
+                    <div class="section-title">来源 IP Top 5</div>
+                    <div class="top-ip-list" id="top-src-ips">
+                        <div style="color:var(--text3);font-size:11.5px;">暂无数据</div>
+                    </div>
+
+                    <div class="section-title">目标 IP Top 5</div>
+                    <div class="top-ip-list" id="top-dst-ips">
+                        <div style="color:var(--text3);font-size:11.5px;">暂无数据</div>
+                    </div>
+                </div>
+
+                <!-- AI 诊断标签页 -->
+                <div class="tab-pane" id="tab-ai">
+                    <!-- 引导状态 -->
+                    <div class="ai-guide" id="ai-guide">
+                        <div class="ai-guide-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
+                        </div>
+                        <h3>AI 智能网络诊断</h3>
+                        <p>收集数据包后，点击"AI 智能诊断"按钮，AI 将自动分析流量异常、识别潜在网络故障，并给出专业修复建议。</p>
+                        <button class="btn btn-ai" id="btn-ai-start-guide" disabled>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/></svg>
+                            开始 AI 诊断
+                        </button>
+                    </div>
+
+                    <!-- 加载状态 -->
+                    <div class="ai-loading" id="ai-loading">
+                        <div class="ai-spinner"></div>
+                        <div class="ai-loading-text">AI 正在分析网络数据...</div>
+                        <div class="ai-loading-steps">
+                            <div class="ai-step active" id="step-1"><div class="ai-step-dot"></div>整理数据包统计摘要</div>
+                            <div class="ai-step" id="step-2"><div class="ai-step-dot"></div>调用 AI 诊断引擎</div>
+                            <div class="ai-step" id="step-3"><div class="ai-step-dot"></div>生成诊断报告</div>
+                        </div>
+                        <div class="ai-loading-sub" id="ai-elapsed">已等待 0 秒...</div>
+                        <!-- 数据摘要卡片 -->
+                        <div class="ai-loading-summary" id="ai-loading-summary"></div>
+                    </div>
+
+                    <!-- 诊断结果 -->
+                    <div class="ai-result" id="ai-result">
+                        <!-- 健康评分 -->
+                        <div class="health-score-card">
+                            <div class="score-ring-wrap">
+                                <svg class="score-ring" width="64" height="64" viewBox="0 0 64 64">
+                                    <circle class="score-ring-bg" cx="32" cy="32" r="27"/>
+                                    <circle class="score-ring-fill" id="score-ring-fill" cx="32" cy="32" r="27"
+                                        stroke-dasharray="170" stroke-dashoffset="170"/>
+                                </svg>
+                                <div class="score-text" id="score-text">--</div>
+                            </div>
+                            <div class="score-info">
+                                <h4 id="score-title">网络健康评分</h4>
+                                <p id="score-summary">--</p>
+                            </div>
+                        </div>
+
+                        <!-- 总体结论 -->
+                        <div id="diag-conclusion" class="diag-conclusion"></div>
+
+                        <!-- 维度评分 -->
+                        <div class="diag-dims-wrap">
+                            <div class="section-title">维度评分</div>
+                            <div id="diag-dimensions" class="diag-dimensions"></div>
+                        </div>
+
+                        <!-- 严重程度分布 -->
+                        <div class="severity-dist">
+                            <div class="section-title">严重程度分布</div>
+                            <div class="sev-row"><span class="sev-label critical">严重</span><div class="sev-bar-track"><div class="sev-bar-fill critical" id="sev-critical" style="width:0%"></div></div><span class="sev-count" id="sev-c-count">0</span></div>
+                            <div class="sev-row"><span class="sev-label high">高</span><div class="sev-bar-track"><div class="sev-bar-fill high" id="sev-high" style="width:0%"></div></div><span class="sev-count" id="sev-h-count">0</span></div>
+                            <div class="sev-row"><span class="sev-label medium">中</span><div class="sev-bar-track"><div class="sev-bar-fill medium" id="sev-medium" style="width:0%"></div></div><span class="sev-count" id="sev-m-count">0</span></div>
+                            <div class="sev-row"><span class="sev-label low">低</span><div class="sev-bar-track"><div class="sev-bar-fill low" id="sev-low" style="width:0%"></div></div><span class="sev-count" id="sev-l-count">0</span></div>
+                        </div>
+
+                        <!-- 故障清单 -->
+                        <div class="issues-section">
+                            <div class="section-title">故障清单</div>
+                            <div id="issues-list"></div>
+                        </div>
+
+                        <!-- 修复建议 -->
+                        <div class="recs-section">
+                            <div class="section-title">修复建议</div>
+                            <div id="recs-list"></div>
+                        </div>
+
+                        <!-- 导出按钮 -->
+                        <div class="export-bar">
+                            <button class="btn" id="btn-export-md">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                导出 Markdown
+                            </button>
+                            <button class="btn" id="btn-export-pdf">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M10 13H8M10 17H8M16 13h-2M16 17h-2"/></svg>
+                                导出 PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 数据包详情弹窗 -->
+    <div class="pkt-modal-overlay" id="pkt-modal-overlay">
+        <div class="pkt-modal" id="pkt-modal">
+            <div class="pkt-modal-header">
+                <svg class="pkt-modal-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                <span class="pkt-modal-title" id="pkt-modal-title">数据包详情</span>
+                <button class="pkt-modal-close" id="pkt-modal-close" title="关闭 (Esc)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="pkt-modal-body">
+                <div class="pkt-tree" id="pkt-modal-inner"></div>
+            </div>
+            <div class="pkt-modal-hint">双击数据包打开 · 点击遮罩或按 Esc 关闭</div>
+        </div>
+    </div>
+
+    <!-- 设置抽屉 -->
+    <div class="settings-overlay" id="settings-overlay">
+        <div class="settings-drawer">
+            <div class="settings-drawer-header">
+                <h3>⚙ 配置设置</h3>
+                <button class="settings-close-btn" id="btn-close-settings" title="关闭">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <div class="settings-section-title">Tshark 环境</div>
+            <div class="tshark-env-card">
+                <div class="tshark-env-status">
+                    <div class="env-icon unknown" id="env-icon">?</div>
+                    <div style="flex:1;min-width:0;">
+                        <div class="env-label" id="env-label">待检测</div>
+                        <div class="env-detail" id="env-detail">点击"检测"按钮验证 tshark 是否可用</div>
+                        <div class="env-version" id="env-version" style="display:none;"></div>
+                        <div class="env-warn" id="env-warn" style="display:none;"></div>
+                    </div>
+                </div>
+                <div class="tshark-actions">
+                    <button class="btn" id="btn-check-tshark-env">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        检测环境
+                    </button>
+                    <button class="btn" id="btn-download-wireshark">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        下载 Wireshark
+                    </button>
+                </div>
+            </div>
+            <div class="field-group">
+                <label class="field-label">tshark 可执行文件路径（留空则自动检测）</label>
+                <div class="path-row">
+                    <input class="field-input" type="text" id="cfg-tshark-path" placeholder="C:\Program Files\Wireshark\tshark.exe">
+                    <button class="btn btn-sm" id="btn-browse-tshark">浏览...</button>
+                </div>
+            </div>
+
+            <div class="settings-section-title">AI 诊断 API</div>
+            <div class="settings-tip">
+                支持 OpenAI 兼容格式 API。点击下方服务商可一键填入配置，再填入对应 API Key 即可使用。
+            </div>
+            <div class="field-group">
+                <label class="field-label">快速选择服务商</label>
+                <div class="preset-btns">
+                    <button class="preset-btn" data-preset="deepseek">DeepSeek</button>
+                    <button class="preset-btn" data-preset="mimo">小米 MiMo</button>
+                    <button class="preset-btn" data-preset="openai">OpenAI</button>
+                </div>
+            </div>
+            <div class="field-group">
+                <label class="field-label">API 端点地址（填 Base URL 即可，端点路径自动补全）</label>
+                <input class="field-input" type="text" id="cfg-api-url" placeholder="https://api.deepseek.com">
+            </div>
+            <div class="field-group">
+                <label class="field-label">API Key</label>
+                <input class="field-input" type="password" id="cfg-api-key" placeholder="sk-...">
+            </div>
+            <div class="field-group">
+                <label class="field-label">模型名称</label>
+                <input class="field-input" type="text" id="cfg-model" placeholder="deepseek-v4-pro" list="model-datalist" autocomplete="off">
+                <datalist id="model-datalist">
+                    <option value="deepseek-v4-pro">DeepSeek V4 Pro（推荐）</option>
+                    <option value="deepseek-v4-flash">DeepSeek V4 Flash（快速）</option>
+                    <option value="mimo-v2.5-pro">小米 MiMo V2.5 Pro</option>
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </datalist>
+            </div>
+
+            <div class="settings-actions">
+                <button class="btn btn-primary" id="btn-save-config">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

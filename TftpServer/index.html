@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>TFTP 服务器</title>
+    <!-- 引入系统内置的多主题样式表 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: var(--bg-primary, #10121e);
+            --text: var(--text-primary, #ffffff);
+            --text-muted: var(--text-muted, #8892b0);
+            --text-sec: var(--text-secondary, #cbd5e1);
+            --border-color: var(--border-color, rgba(255, 255, 255, 0.08));
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.04));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.08));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.12));
+            --result-bg: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #10121e);
+            --danger: var(--danger-color, #ef4444);
+            --danger-hover: #dc2626;
+            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+            --glass-blur: blur(16px);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f8fafc);
+            --text: var(--text-primary, #0f172a);
+            --text-muted: var(--text-muted, #64748b);
+            --text-sec: var(--text-secondary, #334155);
+            --border-color: var(--border-color, rgba(0, 0, 0, 0.08));
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, #cbd5e1);
+            --result-bg: var(--bg-secondary, #f1f5f9);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #ffffff);
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --success: #059669;
+            --warning: #d97706;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Frameless Titlebar dragging */
+        .window-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            padding: 0 16px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            -webkit-app-region: drag;
+            flex-shrink: 0;
+        }
+
+        .window-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .window-controls-placeholder {
+            width: 138px;
+            flex-shrink: 0;
+        }
+
+        /* Content spacing */
+        .app-content {
+            flex: 1;
+            min-height: 0;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: row;
+            gap: 16px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .main-layout-area {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 460px 1fr;
+            gap: 16px;
+            min-width: 0;
+            height: 100%;
+        }
+
+        /* Header button next to window controls */
+        .header-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-sec);
+            font-size: 0.72rem;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            transition: all 0.2s;
+            outline: none;
+            user-select: none;
+            height: 24px;
+            -webkit-app-region: no-drag;
+        }
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: var(--text);
+        }
+        .header-btn.active {
+            background: var(--primary);
+            color: #ffffff;
+            border-color: var(--primary);
+        }
+        .header-btn.active:hover {
+            background: var(--primary-hover);
+        }
+        :root.light-theme .header-btn {
+            background: rgba(0, 0, 0, 0.04);
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+        :root.light-theme .header-btn:hover {
+            background: rgba(0, 0, 0, 0.08);
+            color: #0f172a;
+        }
+        :root.light-theme .header-btn.active {
+            background: var(--primary);
+            color: #ffffff;
+            border-color: var(--primary);
+        }
+
+        /* Instructions side panel */
+        .instructions-panel {
+            width: 300px;
+            flex-shrink: 0;
+            animation: slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .left-column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 0;
+        }
+
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 0;
+        }
+
+        /* Config Grid Forms */
+        .config-section {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .form-row.directory-row {
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .form-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-sec);
+            white-space: nowrap;
+        }
+
+        .required-star {
+            color: var(--danger);
+            margin-right: 3px;
+            font-weight: bold;
+        }
+
+        .form-input-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+
+        .form-control {
+            width: 100%;
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.8rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+
+        .form-control:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        select.form-control {
+            cursor: pointer;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 34px;
+            cursor: pointer;
+        }
+
+        .checkbox-group input {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+        }
+
+        /* File List Table (Left-bottom browser) */
+        .browser-section {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-height: 0;
+        }
+
+        .browser-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--input-bg);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.75rem;
+            color: var(--text-sec);
+            text-align: left;
+            table-layout: fixed;
+        }
+
+        th, td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .progress-cell {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+        }
+
+        th {
+            background: var(--bg-secondary, #1a1d30);
+            font-weight: 600;
+            color: var(--text);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        :root.light-theme th {
+            background: var(--bg-secondary, #f1f5f9);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        :root.light-theme tr:hover td {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .icon-dir {
+            color: #eab308;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        
+        .icon-file {
+            color: var(--text-muted);
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+
+        /* Right side: Transfers progress monitoring */
+        .transfers-section {
+            height: 220px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            height: 6px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        :root.light-theme .progress-bar-container {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            border-radius: 4px;
+            transition: width 0.1s linear;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .status-badge.transferring {
+            background: rgba(37, 99, 235, 0.2);
+            color: #60a5fa;
+        }
+
+        .status-badge.completed {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+        }
+
+        .status-badge.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+
+        /* Logging Console */
+        .log-section {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .log-console {
+            flex: 1;
+            min-height: 0;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.75rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-sec);
+        }
+
+        .log-line {
+            margin-bottom: 3px;
+            line-height: 1.4;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            margin-right: 6px;
+        }
+
+        .log-info { color: var(--text-sec); }
+        .log-success { color: var(--success); }
+        .log-warning { color: var(--warning); }
+        .log-err { color: var(--danger); }
+
+        /* Footer buttons control */
+        .action-footer {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            padding: 12px 0;
+            background: var(--header-bg);
+            border-top: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .btn {
+            height: 36px;
+            padding: 0 24px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            color: var(--text-sec);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
+            color: var(--text);
+        }
+
+        :root.light-theme .btn-secondary {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+
+        .btn-secondary:disabled, .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-sm {
+            height: 28px;
+            padding: 0 10px;
+            font-size: 0.7rem;
+            border-radius: 4px;
+        }
+
+        /* Toast system */
+        .toast {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            opacity: 0;
+            background: rgba(15, 23, 42, 0.9);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            transition: all 0.3s;
+            pointer-events: none;
+            z-index: 100;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            background: rgba(6, 95, 70, 0.95);
+            border-color: rgba(52, 211, 153, 0.2);
+        }
+
+        .toast.error {
+            background: rgba(153, 27, 27, 0.95);
+            border-color: rgba(248, 113, 113, 0.2);
+        }
+
+        /* Secondary close confirmation modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background: var(--bg);
+            border: 1px solid var(--border-color);
+            width: 420px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transform: scale(0.9);
+            transition: transform 0.2s ease;
+        }
+
+        .modal-overlay.active .modal-card {
+            transform: scale(1);
+        }
+
+        .modal-title {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+        }
+
+        .modal-body {
+            font-size: 0.85rem;
+            color: var(--text-sec);
+            line-height: 1.5;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: var(--danger-hover);
+        }
+
+        /* Scrollbars customization */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 自定义标题栏 -->
+    <div class="window-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="window-title">TFTP 服务端</span>
+            <button id="btn-toggle-instructions" class="header-btn" title="查看使用说明">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                使用说明
+            </button>
+        </div>
+        <div class="window-controls-placeholder"></div>
+    </div>
+
+    <!-- 主页面面板 -->
+    <div class="app-content">
+        <div class="main-layout-area">
+            <!-- 左侧配置区及目录浏览器 -->
+            <div class="left-column">
+                <!-- 配置表单 -->
+                <div class="config-section">
+                    <span class="section-title">服务端参数配置</span>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                <span class="form-label">监听网卡地址</span>
+                                <a href="#" id="btn-refresh-interfaces" style="font-size: 0.75rem; color: var(--primary); text-decoration: none; display: flex; align-items: center; gap: 4px; transition: opacity 0.2s;">
+                                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                                        <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                    </svg>
+                                    刷新网卡
+                                </a>
+                            </div>
+                            <select id="server-ip" class="form-control"></select>
+                        </div>
+                    <div class="form-group">
+                        <span class="form-label"><span class="required-star">*</span>服务端口 (UDP)</span>
+                        <input type="number" id="server-port" class="form-control" value="69" min="1" max="65535">
+                    </div>
+                </div>
+
+                <div class="form-row directory-row">
+                    <div class="form-group">
+                        <span class="form-label"><span class="required-star">*</span>共享根目录</span>
+                        <input type="text" id="server-dir" class="form-control" readonly>
+                    </div>
+                    <button id="btn-browse" class="btn btn-secondary btn-sm" style="align-self: flex-end; height: 34px;">浏览</button>
+                </div>
+
+                <div class="form-row">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="server-writable" checked>
+                        <span class="form-label" style="cursor: pointer;" onclick="document.getElementById('server-writable').click()">允许客户端上传写入 (WRQ)</span>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <span class="form-label">超时时间 (秒)</span>
+                        <input type="number" id="server-timeout" class="form-control" value="3" min="1" max="10">
+                    </div>
+                    <div class="form-group">
+                        <span class="form-label">最大重试次数</span>
+                        <input type="number" id="server-retries" class="form-control" value="5" min="1" max="10">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <span class="form-label">最大数据块大小限制 (Bytes, blksize)</span>
+                        <input type="number" id="server-blocksize" class="form-control" value="1468" min="512" max="65464" placeholder="建议 1468 以适配 MTU">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 共享目录文件浏览器 -->
+            <div class="browser-section">
+                <div class="browser-header">
+                    <span class="section-title">共享目录文件列表</span>
+                    <button id="btn-refresh-files" class="btn btn-secondary btn-sm">刷新目录</button>
+                </div>
+                <div class="table-container">
+                    <table id="files-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 55%;">文件名</th>
+                                <th style="width: 20%; text-align: right;">大小</th>
+                                <th style="width: 25%;">修改日期</th>
+                            </tr>
+                        </thead>
+                        <tbody id="files-list-body">
+                            <tr>
+                                <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px 0;">暂无文件或未读取目录</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧活动列表与日志 -->
+        <div class="right-column">
+            <!-- 传输列表 -->
+            <div class="transfers-section">
+                <span class="section-title">活动传输会话监控</span>
+                <div class="table-container">
+                    <table id="transfers-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 28%;">文件名</th>
+                                <th style="width: 24%;">客户端 IP</th>
+                                <th style="width: 12%;">方向</th>
+                                <th style="width: 24%;">进度 / 字节</th>
+                                <th style="width: 12%; text-align: center;">状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transfers-list-body">
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px 0;">当前无活跃的数据传输</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 日志控制台 -->
+            <div class="log-section">
+                <span class="section-title">系统日志信息</span>
+                <div id="log-console" class="log-console"></div>
+            </div>
+        </div> <!-- ends right-column -->
+    </div> <!-- ends main-layout-area -->
+
+    <!-- 右侧使用说明面板 -->
+    <div id="instructions-panel" class="instructions-panel" style="display: none;">
+        <div class="section-title" style="display: flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            </svg>
+            使用说明与帮助
+        </div>
+        <div class="instructions-content" style="flex: 1; overflow-y: auto; font-size: 0.78rem; line-height: 1.55; color: var(--text-sec); display: flex; flex-direction: column; gap: 10px; padding-right: 2px;">
+            <p>1. <strong>网卡刷新与监听</strong>：点击网卡标签右侧的“刷新网卡”链接，可重新载入当前系统的网络接口。请选择客户端能正常访问의 IP 地址。</p>
+            <p>2. <strong>特权端口占用</strong>：默认 UDP 端口为 69。在部分系统上，绑定低于 1024 端口需要<strong>管理员运行权限</strong>。若启动失败提示权限不足 (EACCES)，可右键以管理员方式打开软件或自定义较高端口（如 6969）。</p>
+            <p>3. <strong>可写控制开关</strong>：开启“允许上传写入”开关允许客户端向服务端上传文件，否则客户端的 WRQ 请求将被自动拒绝。</p>
+            <p>4. <strong>安全沙箱防御</strong>：为防范任意文件读取等安全风险（目录穿越漏洞），本服务端严格过滤 `../` 等跨域目录访问，超出共享根目录的文件传输将被强制阻断并生成安全审计警报。</p>
+            <p>5. <strong>并发端口机制 (RFC 1350)</strong>：本服务端天然支持多客户端并发。收到客户端初始请求后，将分拨单独的随机临时端口用于后续数据传输，不会长时间霸占主端口 69。</p>
+            
+            <div style="margin-top: 6px; border-top: 1px solid var(--border-color); padding-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                <div style="font-weight: 600; color: var(--text); font-size: 0.8rem;">常见问题排查</div>
+                <div style="font-size: 0.72rem; background: rgba(255,255,255,0.01); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); line-height: 1.45;">
+                    <strong style="color: var(--primary);">Q: 客户端传输文件提示超时？</strong><br/>
+                    <span style="color: var(--text-muted);">A: TFTP 基于无状态的 UDP，网络丢包时会尝试超时重发。如遇到大文件上传中断，可调大“超时时间”或“重试次数”，或调小“最大块限制 (blksize)”以防止物理分片丢包。</span>
+                </div>
+                <div style="font-size: 0.72rem; background: rgba(255,255,255,0.01); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); line-height: 1.45;">
+                    <strong style="color: var(--primary);">Q: 上传完成后文件列表中没有文件？</strong><br/>
+                    <span style="color: var(--text-muted);">A: 上传成功后，表格将在几秒内自动刷新；若未显示，可手动点击左下方“刷新目录”按钮更新共享目录浏览器缓存。</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> <!-- ends app-content -->
+
+    <!-- 底部操作按钮 -->
+    <div class="action-footer">
+        <button id="btn-start" class="btn btn-primary">开始</button>
+        <button id="btn-stop" class="btn btn-secondary" disabled>停止</button>
+    </div>
+
+    <!-- 弹窗反馈 -->
+    <div id="toast" class="toast">提示信息</div>
+
+    <!-- 关闭确认模态框 -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal-card">
+            <div class="modal-title">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--danger)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                <span>关闭确认</span>
+            </div>
+            <div class="modal-body">
+                TFTP 服务端正在运行中，关闭窗口将立即中止所有活动传输并释放绑定的网络端口。确定要退出吗？
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-close">取消</button>
+                <button class="btn btn-danger" id="btn-confirm-close">确定关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const os = require('os');
+        const fs = require('fs');
+
+        // 获取表单配置元素
+        const timeoutInput = document.getElementById('server-timeout');
+        const retriesInput = document.getElementById('server-retries');
+        const blocksizeInput = document.getElementById('server-blocksize');
+        const portInput = document.getElementById('server-port');
+        const ipSelect = document.getElementById('server-ip');
+        const writableCheck = document.getElementById('server-writable');
+        const dirInput = document.getElementById('server-dir');
+
+        const btnBrowse = document.getElementById('btn-browse');
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const btnRefreshFiles = document.getElementById('btn-refresh-files');
+        const logConsole = document.getElementById('log-console');
+
+        const filesListBody = document.getElementById('files-list-body');
+        const transfersListBody = document.getElementById('transfers-list-body');
+
+        const confirmModal = document.getElementById('confirm-modal');
+        const btnConfirmClose = document.getElementById('btn-confirm-close');
+        const btnCancelClose = document.getElementById('btn-cancel-close');
+
+        const btnRefreshInterfaces = document.getElementById('btn-refresh-interfaces');
+        const btnToggleInstructions = document.getElementById('btn-toggle-instructions');
+        const instructionsPanel = document.getElementById('instructions-panel');
+
+        let isRunning = false;
+
+        // 设置默认路径
+        const defaultDir = os.homedir();
+        dirInput.value = defaultDir;
+
+        // 初始化可用网卡接口
+        function initNetworkInterfaces() {
+            const interfaces = os.networkInterfaces();
+            ipSelect.innerHTML = '';
+
+            const optAll = document.createElement('option');
+            optAll.value = '0.0.0.0';
+            optAll.textContent = '0.0.0.0 (所有本地网卡)';
+            ipSelect.appendChild(optAll);
+
+            for (const name of Object.keys(interfaces)) {
+                for (const netInfo of interfaces[name]) {
+                    if (netInfo.family === 'IPv4') {
+                        const opt = document.createElement('option');
+                        opt.value = netInfo.address;
+                        opt.textContent = `${netInfo.address} - ${name}`;
+                        ipSelect.appendChild(opt);
+                    }
+                }
+            }
+        }
+
+        // 格式化文件大小
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // 刷新共享目录中的文件列表
+        async function refreshFilesList() {
+            const pathVal = dirInput.value.trim();
+            if (!pathVal) return;
+
+            try {
+                const list = await ipcRenderer.invoke('tftpServer:listFiles', pathVal);
+                filesListBody.innerHTML = '';
+
+                if (list.length === 0) {
+                    filesListBody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px 0;">该共享目录下无文件或文件夹</td></tr>';
+                    return;
+                }
+
+                for (const file of list) {
+                    const tr = document.createElement('tr');
+                    
+                    const nameTd = document.createElement('td');
+                    // 增加文件夹/文件的图标标识
+                    if (file.isDirectory) {
+                        nameTd.innerHTML = `<span class="icon-dir">&#128193;</span> ${file.name}`;
+                    } else {
+                        nameTd.innerHTML = `<span class="icon-file">&#128196;</span> ${file.name}`;
+                    }
+                    tr.appendChild(nameTd);
+
+                    const sizeTd = document.createElement('td');
+                    sizeTd.style.textAlign = 'right';
+                    sizeTd.textContent = file.isDirectory ? '--' : formatBytes(file.size);
+                    tr.appendChild(sizeTd);
+
+                    const mtimeTd = document.createElement('td');
+                    mtimeTd.textContent = file.mtime;
+                    tr.appendChild(mtimeTd);
+
+                    filesListBody.appendChild(tr);
+                }
+            } catch (err) {
+                filesListBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--danger); padding: 20px 0;">读取目录出错: ${err.message}</td></tr>`;
+            }
+        }
+
+        // 提示消息 Toast
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            if (type === 'error') {
+                toast.classList.add('error');
+            } else if (type === 'success') {
+                toast.classList.add('success');
+            }
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // 添加一条日志行
+        function appendLog(logObj) {
+            const text = typeof logObj === 'string' ? logObj : logObj.message;
+            const logType = typeof logObj === 'string' ? 'info' : (logObj.type || 'info');
+            const timeStr = typeof logObj === 'string' ? new Date().toLocaleTimeString() : (logObj.time || new Date().toLocaleTimeString());
+
+            const line = document.createElement('div');
+            line.className = 'log-line';
+
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-time';
+            timeSpan.textContent = `[${timeStr}]`;
+            line.appendChild(timeSpan);
+
+            const contentSpan = document.createElement('span');
+            if (logType === 'success') {
+                contentSpan.className = 'log-success';
+            } else if (logType === 'warning') {
+                contentSpan.className = 'log-warning';
+            } else if (logType === 'error') {
+                contentSpan.className = 'log-err';
+            } else {
+                contentSpan.className = 'log-info';
+            }
+
+            contentSpan.textContent = text;
+            line.appendChild(contentSpan);
+
+            logConsole.appendChild(line);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // 浏览共享文件夹
+        btnBrowse.addEventListener('click', async () => {
+            const chosenDir = await ipcRenderer.invoke('tftpServer:selectDirectory');
+            if (chosenDir) {
+                dirInput.value = chosenDir;
+                refreshFilesList();
+            }
+        });
+
+        // 刷新文件按钮
+        btnRefreshFiles.addEventListener('click', () => {
+            refreshFilesList();
+        });
+
+        // 刷新网卡列表监听器
+        btnRefreshInterfaces.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (isRunning) return;
+            initNetworkInterfaces();
+            showToast('网卡列表已刷新', 'success');
+        });
+
+        // 使用说明侧边栏展开与折叠控制
+        let showInstructions = false;
+        btnToggleInstructions.addEventListener('click', (e) => {
+            e.preventDefault();
+            showInstructions = !showInstructions;
+            const currentHeight = window.outerHeight;
+            const currentWidth = window.outerWidth;
+
+            if (showInstructions) {
+                window.resizeTo(currentWidth + 300, currentHeight);
+                instructionsPanel.style.display = 'flex';
+                btnToggleInstructions.classList.add('active');
+                btnToggleInstructions.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                    收起说明
+                `;
+            } else {
+                window.resizeTo(Math.max(1100, currentWidth - 300), currentHeight);
+                instructionsPanel.style.display = 'none';
+                btnToggleInstructions.classList.remove('active');
+                btnToggleInstructions.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                    使用说明
+                `;
+            }
+        });
+
+        // 切换控件的禁用状态
+        function setControlsDisabled(disabled) {
+            isRunning = disabled;
+            ipSelect.disabled = disabled;
+            portInput.disabled = disabled;
+            btnBrowse.disabled = disabled;
+            writableCheck.disabled = disabled;
+            timeoutInput.disabled = disabled;
+            retriesInput.disabled = disabled;
+            blocksizeInput.disabled = disabled;
+
+            if (disabled) {
+                btnRefreshInterfaces.style.opacity = '0.5';
+                btnRefreshInterfaces.style.pointerEvents = 'none';
+            } else {
+                btnRefreshInterfaces.style.opacity = '1';
+                btnRefreshInterfaces.style.pointerEvents = 'auto';
+            }
+        }
+
+        // 启动 TFTP 服务器
+        btnStart.addEventListener('click', async () => {
+            const portVal = parseInt(portInput.value.trim());
+            const timeoutVal = parseInt(timeoutInput.value.trim());
+            const retriesVal = parseInt(retriesInput.value.trim());
+            const blocksizeVal = parseInt(blocksizeInput.value.trim());
+            const dirVal = dirInput.value.trim();
+
+            // 参数合法性验证
+            if (isNaN(portVal) || portVal < 1 || portVal > 65535) {
+                showToast('端口号必须在 1 至 65535 之间', 'error');
+                return;
+            }
+            if (isNaN(timeoutVal) || timeoutVal < 1 || timeoutVal > 10) {
+                showToast('超时时间必须在 1 至 10 秒之间', 'error');
+                return;
+            }
+            if (isNaN(retriesVal) || retriesVal < 1 || retriesVal > 10) {
+                showToast('最大重试次数必须在 1 至 10 之间', 'error');
+                return;
+            }
+            if (isNaN(blocksizeVal) || blocksizeVal < 512 || blocksizeVal > 65464) {
+                showToast('最大数据块大小必须在 512 至 65464 Bytes 之间', 'error');
+                return;
+            }
+            if (!dirVal) {
+                showToast('共享根目录不能为空', 'error');
+                return;
+            }
+            if (!fs.existsSync(dirVal)) {
+                showToast('配置的共享根目录在本地不存在', 'error');
+                return;
+            }
+
+            btnStart.disabled = true;
+            btnStart.textContent = '启动中...';
+
+            const config = {
+                host: ipSelect.value,
+                port: portVal,
+                rootDirectory: dirVal,
+                writable: writableCheck.checked,
+                timeout: timeoutVal,
+                retries: retriesVal,
+                maxBlockSize: blocksizeVal
+            };
+
+            try {
+                const res = await ipcRenderer.invoke('tftpServer:start', config);
+                if (res.success) {
+                    showToast('TFTP 服务器启动成功', 'success');
+                    setControlsDisabled(true);
+                    btnStart.textContent = '运行中';
+                    btnStart.disabled = true;
+                    btnStop.disabled = false;
+                    
+                    // 启动后加载最新文件列表
+                    refreshFilesList();
+                } else {
+                    let errorMsg = res.error;
+                    if (res.error.includes('EACCES')) {
+                        errorMsg = '权限不足（无法绑定 UDP 端口 ' + portVal + '）。请尝试以管理员身份运行此工具包软件，或将端口改为大于 1024 的自定义端口（如 6969）。';
+                    } else if (res.error.includes('EADDRINUSE')) {
+                        errorMsg = '端口 ' + portVal + ' 已被占用。请确保未运行其他 TFTP 服务（如 Windows 部署服务 WDS），或更换其他自定义端口。';
+                    }
+                    showToast('服务启动失败: ' + errorMsg, 'error');
+                    btnStart.disabled = false;
+                    btnStart.textContent = '开始';
+                }
+            } catch (err) {
+                showToast('服务器发生异常: ' + err.message, 'error');
+                btnStart.disabled = false;
+                btnStart.textContent = '开始';
+            }
+        });
+
+        // 停止 TFTP 服务器
+        btnStop.addEventListener('click', async () => {
+            btnStop.disabled = true;
+            btnStop.textContent = '停止中...';
+
+            try {
+                const res = await ipcRenderer.invoke('tftpServer:stop');
+                if (res.success) {
+                    showToast('TFTP 服务器已成功停止', 'success');
+                    setControlsDisabled(false);
+                    btnStart.disabled = false;
+                    btnStart.textContent = '开始';
+                    btnStop.textContent = '停止';
+                    btnStop.disabled = true;
+                    
+                    // 停止服务清空活动会话
+                    transfersListBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px 0;">当前无活跃的数据传输</td></tr>';
+                    
+                    // 刷新目录列表以查看上传产物
+                    refreshFilesList();
+                } else {
+                    showToast('服务关闭失败: ' + res.error, 'error');
+                    btnStop.disabled = false;
+                    btnStop.textContent = '停止';
+                }
+            } catch (err) {
+                showToast('关闭异常: ' + err.message, 'error');
+                btnStop.disabled = false;
+                btnStop.textContent = '停止';
+            }
+        });
+
+        // 监听并接收活动会话更新
+        ipcRenderer.on('tftpServer:transfers', (event, transfers) => {
+            // 如果列表为空
+            if (!transfers || transfers.length === 0) {
+                transfersListBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px 0;">当前无活跃的数据传输</td></tr>';
+                return;
+            }
+
+            transfersListBody.innerHTML = '';
+            for (const t of transfers) {
+                const tr = document.createElement('tr');
+
+                // 文件名
+                const fileTd = document.createElement('td');
+                fileTd.textContent = t.filename;
+                fileTd.title = t.filename;
+                tr.appendChild(fileTd);
+
+                // 客户端 IP
+                const clientTd = document.createElement('td');
+                clientTd.textContent = t.client;
+                tr.appendChild(clientTd);
+
+                // 传输方向 (下载/上传)
+                const typeTd = document.createElement('td');
+                typeTd.textContent = t.type === 'download' ? '下载' : '上传';
+                typeTd.style.color = t.type === 'download' ? 'var(--primary)' : 'var(--success)';
+                tr.appendChild(typeTd);
+
+                // 进度列 (进度条 + 字节进度)
+                const progressTd = document.createElement('td');
+                progressTd.className = 'progress-cell';
+                const progressText = document.createElement('div');
+                progressText.style.display = 'flex';
+                progressText.style.justifyContent = 'space-between';
+                progressText.style.fontSize = '0.7rem';
+                
+                const bytesStr = `${formatBytes(t.bytesTransferred)} / ${t.totalBytes ? formatBytes(t.totalBytes) : '未知'}`;
+                progressText.innerHTML = `<span>${bytesStr}</span><span>${t.progress}%</span>`;
+                progressTd.appendChild(progressText);
+
+                const barContainer = document.createElement('div');
+                barContainer.className = 'progress-bar-container';
+                const barFill = document.createElement('div');
+                barFill.className = 'progress-bar-fill';
+                barFill.style.width = `${t.progress}%`;
+                barContainer.appendChild(barFill);
+                progressTd.appendChild(barContainer);
+
+                tr.appendChild(progressTd);
+
+                // 状态
+                const statusTd = document.createElement('td');
+                statusTd.style.textAlign = 'center';
+                const badge = document.createElement('span');
+                badge.className = `status-badge ${t.status}`;
+                if (t.status === 'transferring') {
+                    badge.textContent = '传输中';
+                } else if (t.status === 'completed') {
+                    badge.textContent = '已完成';
+                    // 传输完成后触发本地文件刷新
+                    setTimeout(() => refreshFilesList(), 1500);
+                } else if (t.status === 'error') {
+                    badge.textContent = '错误';
+                    badge.title = t.error;
+                }
+                statusTd.appendChild(badge);
+                tr.appendChild(statusTd);
+
+                transfersListBody.appendChild(tr);
+            }
+        });
+
+        // 监听并接收底层日志信息
+        ipcRenderer.on('tftpServer:log', (event, logObj) => {
+            appendLog(logObj);
+        });
+
+        // 拦截主进程发起的窗口关闭请求并弹出确认模态框
+        ipcRenderer.on('tftpServer:request-close', () => {
+            confirmModal.classList.add('active');
+        });
+
+        // 二次确认关闭：确定关闭
+        btnConfirmClose.addEventListener('click', () => {
+            confirmModal.classList.remove('active');
+            ipcRenderer.send('tftpServer:confirm-close');
+        });
+
+        // 二次确认关闭：取消
+        btnCancelClose.addEventListener('click', () => {
+            confirmModal.classList.remove('active');
+        });
+
+        // 全局主题色应用与同步
+        function applyTheme(theme) {
+            if (!theme) return;
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+
+        // 首次加载同步当前的主题配置
+        const _qs = new URLSearchParams(location.search);
+        const _qsMode = _qs.get('mode');
+        const _qsTheme = _qs.get('theme');
+        if (_qsMode || _qsTheme) {
+            applyTheme({ mode: _qsMode, key: _qsTheme });
+        } else {
+            ipcRenderer.invoke('theme:get').then(theme => {
+                applyTheme(theme);
+            }).catch(() => {});
+        }
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+
+        // 初始化页面数据
+        document.addEventListener('DOMContentLoaded', () => {
+            initNetworkInterfaces();
+            refreshFilesList();
+            appendLog('TFTP 服务端初始化就绪。请指定共享参数并点击 [开始] 启动服务。');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DNS 查询工具</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch (e) { }
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #1a1a2e);
+            --text: var(--text-primary, #fff);
+            --text-muted: var(--text-muted, #888);
+            --text-sec: var(--text-secondary, #aaa);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.06));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.1));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.15));
+            --tab-bg: rgba(255, 255, 255, 0.04);
+            --tab-active-bg: rgba(255, 255, 255, 0.08);
+            --hr: var(--border-color, rgba(255, 255, 255, 0.08));
+            --hover-bg: rgba(255, 255, 255, 0.04);
+            --log-bg: var(--bg-secondary, rgba(0, 0, 0, 0.3));
+            --in-color: var(--success-color, #22c55e);
+            --out-color: #3b82f6;
+            --err-color: var(--danger-color, #ef4444);
+            --warn-color: var(--warning-color, #f59e0b);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --row-alt: rgba(255, 255, 255, 0.02);
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f5f7fa);
+            --text: var(--text-primary, #1a1a2e);
+            --text-muted: var(--text-muted, #666);
+            --text-sec: var(--text-secondary, #555);
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, rgba(0, 0, 0, 0.15));
+            --tab-bg: transparent;
+            --tab-active-bg: rgba(0, 0, 0, 0.04);
+            --hr: var(--border-color, rgba(0, 0, 0, 0.08));
+            --hover-bg: rgba(0, 0, 0, 0.03);
+            --log-bg: var(--bg-secondary, #fafafa);
+            --in-color: var(--success-color, #16a34a);
+            --out-color: #2563eb;
+            --err-color: var(--danger-color, #dc2626);
+            --warn-color: var(--warning-color, #d97706);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --row-alt: rgba(0, 0, 0, 0.02);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 48px 20px 16px 20px;
+        }
+
+        /* ==================== Tabs ==================== */
+        .tabs {
+            display: flex;
+            gap: 6px;
+            border-bottom: 1px solid var(--hr);
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            padding: 9px 18px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            border-radius: 6px 6px 0 0;
+            position: relative;
+            transition: color 0.15s;
+        }
+
+        .tab:hover { color: var(--text); }
+
+        .tab.active {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            bottom: -1px;
+            height: 2px;
+            background: var(--primary);
+            border-radius: 1px;
+        }
+
+        /* ==================== Panel ==================== */
+        .panel {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .panel.active { display: flex; }
+
+        .panel-scroll {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding-right: 4px;
+        }
+
+        /* 关键：避免 flex 容器压缩子元素，让它们保持自然高度并允许滚动 */
+        .panel-scroll > * { flex-shrink: 0; }
+
+        /* ==================== Card ==================== */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            transition: padding 0.2s ease;
+        }
+
+        .card-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card.collapsible .card-title {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .card.collapsible .card-title:hover { color: var(--text); }
+
+        .card.collapsible .card-title .toggle-arrow {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            transition: transform 0.2s ease;
+        }
+
+        .card.collapsed { padding-bottom: 0; }
+        .card.collapsed .card-title { margin-bottom: 14px; }
+        .card.collapsed .card-body { display: none; }
+        .card.collapsed .card-title .toggle-arrow { transform: rotate(-90deg); }
+
+        .card-summary {
+            display: none;
+            font-size: 0.74rem;
+            color: var(--text-sec);
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-weight: normal;
+        }
+
+        .card.collapsed .card-summary { display: inline; }
+
+        .card-summary .sep { color: var(--text-muted); margin: 0 6px; }
+
+        /* ==================== Form ==================== */
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .form-row:last-child { margin-bottom: 0; }
+
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+
+        .form-group.span-2 { grid-column: span 2; }
+        .form-group.span-3 { grid-column: span 3; }
+
+        .form-group label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        input[type="text"], input[type="number"], select {
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: var(--text);
+            font-size: 0.85rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        input:focus, select:focus { border-color: var(--primary); }
+
+        /* ==================== Buttons ==================== */
+        .btn-group { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+
+        .btn {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+        .btn-secondary {
+            background: var(--tab-active-bg);
+            color: var(--text);
+            border: 1px solid var(--input-border);
+        }
+
+        .btn-secondary:hover:not(:disabled) { background: var(--hover-bg); }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--err-color);
+            border: 1px solid var(--err-color);
+        }
+
+        .btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.1); }
+
+        .btn-small { padding: 4px 10px; font-size: 0.75rem; }
+
+        /* ==================== Status ==================== */
+        .status-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            background: var(--hover-bg);
+            color: var(--text-sec);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .status-dot.connecting { background: var(--warn-color); animation: blink 1s infinite; }
+        .status-dot.online { background: var(--in-color); }
+        .status-dot.error { background: var(--err-color); }
+
+        @keyframes blink { 50% { opacity: 0.4; } }
+
+        /* ==================== Chips (类型选择) ==================== */
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .chip {
+            padding: 4px 11px;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 14px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            color: var(--text-sec);
+            user-select: none;
+            transition: all 0.15s;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .chip:hover { color: var(--text); border-color: var(--text-muted); }
+
+        .chip.selected {
+            background: rgba(37, 99, 235, 0.15);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* ==================== Preset 快捷按钮 ==================== */
+        .preset-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .preset-btn {
+            padding: 3px 9px;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            cursor: pointer;
+            font-family: 'Consolas', 'Monaco', monospace;
+            transition: all 0.15s;
+        }
+
+        .preset-btn:hover {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* ==================== Server List (多选) ==================== */
+        .server-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 6px;
+        }
+
+        .server-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 0.8rem;
+        }
+
+        .server-item:hover { border-color: var(--text-muted); }
+
+        .server-item.selected {
+            background: rgba(37, 99, 235, 0.1);
+            border-color: var(--primary);
+        }
+
+        .server-item input { margin: 0; cursor: pointer; }
+
+        .server-item .si-name {
+            color: var(--text);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .server-item .si-meta {
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            margin-top: 2px;
+            word-break: break-all;
+        }
+
+        .server-item .si-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ==================== Badge ==================== */
+        .badge {
+            display: inline-block;
+            padding: 1px 6px;
+            font-size: 0.65rem;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            background: rgba(37, 99, 235, 0.15);
+            color: var(--primary);
+        }
+
+        .badge.udp { background: rgba(148, 163, 184, 0.15); color: var(--text-sec); }
+        .badge.tcp { background: rgba(245, 158, 11, 0.15); color: var(--warn-color); }
+        .badge.dot { background: rgba(34, 197, 94, 0.15); color: var(--in-color); }
+        .badge.doh { background: rgba(59, 130, 246, 0.15); color: var(--out-color); }
+
+        /* ==================== Result Block ==================== */
+        .result-block {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .result-head {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--hr);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.8rem;
+        }
+
+        .result-head .rh-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .result-head .rh-right {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: nowrap;
+        }
+
+        .result-head .domain {
+            color: var(--text);
+            font-family: 'Consolas', 'Monaco', monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .result-body { font-family: 'Consolas', 'Monaco', monospace; }
+
+        /* ==================== Records Table ==================== */
+        table.records {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+
+        table.records th {
+            padding: 7px 14px;
+            background: var(--hover-bg);
+            color: var(--text-muted);
+            font-weight: 500;
+            text-align: left;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--hr);
+        }
+
+        table.records td {
+            padding: 7px 14px;
+            border-bottom: 1px solid var(--hr);
+            color: var(--text-sec);
+            word-break: break-all;
+            user-select: text;
+        }
+
+        table.records tr:last-child td { border-bottom: none; }
+        table.records tr:nth-child(even) td { background: var(--row-alt); }
+        table.records tr:hover td { background: var(--hover-bg); }
+
+        .col-type { color: var(--primary); font-weight: 600; white-space: nowrap; }
+        .col-ttl { color: var(--warn-color); white-space: nowrap; }
+        .col-data { color: var(--text); }
+
+        .empty-row td, .error-row td {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 18px;
+            font-style: italic;
+        }
+
+        .error-row td { color: var(--err-color); }
+
+        /* ==================== Compare Table ==================== */
+        .compare-wrap { overflow-x: auto; }
+
+        table.compare {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+
+        table.compare th {
+            padding: 8px 12px;
+            background: var(--hover-bg);
+            color: var(--text-muted);
+            font-weight: 500;
+            text-align: left;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--hr);
+        }
+
+        table.compare td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--hr);
+            vertical-align: top;
+            user-select: text;
+        }
+
+        table.compare tr:last-child td { border-bottom: none; }
+
+        .server-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            white-space: nowrap;
+            min-width: 160px;
+        }
+
+        .server-cell .sc-name {
+            color: var(--text);
+            font-weight: 600;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .server-cell .sc-addr {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: normal;
+            word-break: break-all;
+        }
+
+        .answers-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .answer-line {
+            display: grid;
+            grid-template-columns: 50px 1fr auto;
+            gap: 8px;
+            align-items: baseline;
+            color: var(--text);
+            font-size: 0.76rem;
+        }
+
+        .answer-line .type-mini { color: var(--primary); font-weight: 600; }
+        .answer-line .ttl-mini { color: var(--text-muted); font-size: 0.7rem; }
+
+        .time-cell {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: nowrap;
+        }
+
+        .rcode-ok { color: var(--in-color); font-weight: 600; }
+        .rcode-error { color: var(--err-color); font-weight: 600; }
+
+        /* ==================== Inconsistent Banner ==================== */
+        .inconsistent {
+            padding: 10px 14px;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            border-radius: 8px;
+            color: var(--warn-color);
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .inconsistent-icon {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--warn-color);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        /* ==================== Notice (信息提示) ==================== */
+        .notice {
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            border-radius: 8px;
+            font-size: 0.78rem;
+            color: var(--text-sec);
+            line-height: 1.6;
+        }
+
+        .notice-icon {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--out-color);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.7rem;
+            margin-top: 1px;
+        }
+
+        .notice code {
+            color: var(--text);
+            background: var(--input-bg);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.72rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        /* ==================== Trace ==================== */
+        .trace-step {
+            position: relative;
+            padding-left: 32px;
+        }
+
+        .trace-step::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 22px;
+            bottom: -14px;
+            width: 2px;
+            background: var(--hr);
+        }
+
+        .trace-step:last-child::before { display: none; }
+
+        .trace-dot {
+            position: absolute;
+            left: 0;
+            top: 6px;
+            width: 22px;
+            height: 22px;
+            background: var(--bg);
+            border: 2px solid var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--primary);
+            z-index: 1;
+        }
+
+        .trace-step.final .trace-dot {
+            background: var(--in-color);
+            border-color: var(--in-color);
+            color: #fff;
+        }
+
+        .trace-step.error .trace-dot {
+            background: var(--err-color);
+            border-color: var(--err-color);
+            color: #fff;
+        }
+
+        .trace-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .trace-head {
+            padding: 8px 12px;
+            background: var(--hover-bg);
+            border-bottom: 1px solid var(--hr);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 0.78rem;
+            flex-wrap: wrap;
+        }
+
+        .trace-head .th-label {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+        }
+
+        .trace-head .th-server {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--text);
+            margin-left: 8px;
+        }
+
+        .trace-head .th-meta {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            white-space: nowrap;
+        }
+
+        .trace-body {
+            padding: 10px 14px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.72rem;
+            color: var(--text-sec);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .trace-section {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .trace-sect-title {
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .trace-rr {
+            display: grid;
+            grid-template-columns: 50px 70px 1fr;
+            gap: 8px;
+            padding: 1px 0;
+            user-select: text;
+        }
+
+        .trace-rr .rr-type { color: var(--primary); font-weight: 600; }
+        .trace-rr .rr-ttl { color: var(--warn-color); }
+        .trace-rr .rr-data { color: var(--text); word-break: break-all; }
+
+        /* ==================== Scrollbar ==================== */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: var(--input-border);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ==================== Helpers ==================== */
+        .row-flex {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .row-flex .grow { flex: 1; min-width: 0; }
+
+        .text-muted { color: var(--text-muted); font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="tabs">
+            <button class="tab active" data-tab="single">单次查询</button>
+            <button class="tab" data-tab="compare">多服务器对比</button>
+            <button class="tab" data-tab="trace">递归追踪</button>
+        </div>
+
+        <!-- ==================== 单次查询 ==================== -->
+        <div class="panel active" data-panel="single">
+            <div class="card">
+                <div class="card-title">查询参数</div>
+                <div class="form-row">
+                    <div class="form-group span-2">
+                        <label>域名</label>
+                        <input type="text" id="single-domain" value="example.com" placeholder="如 example.com">
+                        <div class="preset-row">
+                            <button class="preset-btn" data-domain="example.com">example.com</button>
+                            <button class="preset-btn" data-domain="google.com">google.com</button>
+                            <button class="preset-btn" data-domain="baidu.com">baidu.com</button>
+                            <button class="preset-btn" data-domain="cloudflare.com">cloudflare.com</button>
+                            <button class="preset-btn" data-domain="github.com">github.com</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>DNS 服务器</label>
+                        <select id="single-server-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>传输协议</label>
+                        <select id="single-transport">
+                            <option value="udp">UDP</option>
+                            <option value="tcp">TCP</option>
+                            <option value="dot">DoT</option>
+                            <option value="doh">DoH</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>超时 (ms)</label>
+                        <input type="number" id="single-timeout" value="5000" min="500" max="30000">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label>记录类型（可多选）</label>
+                    <div class="chips" id="single-type-chips"></div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="single-query-btn">开始查询</button>
+                    <button class="btn btn-secondary" id="single-clear-btn">清空结果</button>
+                </div>
+            </div>
+
+            <div class="status-line" id="single-status" style="display: none;">
+                <span class="status-dot"></span>
+                <span class="status-text">就绪</span>
+            </div>
+
+            <div class="panel-scroll" id="single-results"></div>
+        </div>
+
+        <!-- ==================== 多服务器对比 ==================== -->
+        <div class="panel" data-panel="compare">
+            <div class="card collapsible" id="compare-params-card">
+                <div class="card-title" id="compare-params-toggle">
+                    <span>
+                        对比参数<span class="card-summary" id="compare-params-summary"></span>
+                    </span>
+                    <span class="toggle-arrow">&#9662;</span>
+                </div>
+                <div class="card-body">
+                    <div class="form-row">
+                        <div class="form-group span-2">
+                            <label>域名</label>
+                            <input type="text" id="compare-domain" value="example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>记录类型</label>
+                            <select id="compare-type">
+                                <option value="A">A</option>
+                                <option value="AAAA">AAAA</option>
+                                <option value="CNAME">CNAME</option>
+                                <option value="MX">MX</option>
+                                <option value="NS">NS</option>
+                                <option value="TXT">TXT</option>
+                                <option value="SOA">SOA</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>超时 (ms)</label>
+                            <input type="number" id="compare-timeout" value="5000" min="500" max="30000">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label>参与对比的服务器（可多选）</label>
+                        <div class="server-list" id="compare-server-list"></div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="compare-query-btn">开始对比</button>
+                        <button class="btn btn-secondary" id="compare-select-all">全选</button>
+                        <button class="btn btn-secondary" id="compare-clear-sel">取消全选</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-line" id="compare-status" style="display: none;">
+                <span class="status-dot"></span>
+                <span class="status-text">就绪</span>
+            </div>
+
+            <div class="panel-scroll">
+                <div id="compare-inconsistent" style="display: none;"></div>
+
+                <div class="result-block" id="compare-result-wrap" style="display: none;">
+                    <div class="result-head">
+                        <div class="rh-left">
+                            <span class="badge" id="compare-result-type">A</span>
+                            <span class="domain" id="compare-result-domain">--</span>
+                        </div>
+                    </div>
+                    <div class="result-body compare-wrap">
+                        <table class="compare">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 160px;">服务器</th>
+                                    <th style="width: 80px;">RCODE</th>
+                                    <th>应答记录</th>
+                                    <th style="width: 80px;">耗时</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compare-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== 递归追踪 ==================== -->
+        <div class="panel" data-panel="trace">
+            <div class="card">
+                <div class="card-title">追踪参数</div>
+                <div class="form-row">
+                    <div class="form-group span-2">
+                        <label>域名</label>
+                        <input type="text" id="trace-domain" value="www.example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>记录类型</label>
+                        <select id="trace-type">
+                            <option value="A">A</option>
+                            <option value="AAAA">AAAA</option>
+                            <option value="MX">MX</option>
+                            <option value="NS">NS</option>
+                            <option value="TXT">TXT</option>
+                            <option value="SOA">SOA</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>超时 (ms)</label>
+                        <input type="number" id="trace-timeout" value="5000" min="500" max="30000">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="trace-start-btn">开始追踪</button>
+                    <button class="btn btn-danger" id="trace-stop-btn" disabled>停止</button>
+                </div>
+            </div>
+
+            <div class="notice">
+                <span class="notice-icon">i</span>
+                <div>
+                    从 <code>a.root-servers.net</code> 等根服务器开始，逐级追踪 NS 委派关系（根 → TLD → 权威），并显示每跳的应答、权威和附加段。<br>
+                    采用关闭递归位（RD=0）的 UDP / 53 直连；中间路径若服务器禁止外部查询会被记为错误并自动尝试下一个候选。
+                </div>
+            </div>
+
+            <div class="status-line" id="trace-status" style="display: none;">
+                <span class="status-dot"></span>
+                <span class="status-text">就绪</span>
+            </div>
+
+            <div class="panel-scroll" id="trace-steps"></div>
+        </div>
+    </div>
+
+    <script src="./renderer.js"></script>
+</body>
+</html>

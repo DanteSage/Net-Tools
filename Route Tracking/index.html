@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>路由追踪工具</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg-start: var(--bg-primary, #1a1a2e); --bg-end: var(--bg-secondary, #16213e); --text: var(--text-primary, #fff); --text-muted: var(--text-muted, #888); --text-sec: var(--text-secondary, #aaa);
+            --card-bg: var(--bg-card, rgba(255,255,255,0.08)); --card-border: var(--border-color, rgba(255,255,255,0.12));
+            --input-bg: var(--bg-tertiary, rgba(0,0,0,0.3)); --input-border: var(--border-light, rgba(255,255,255,0.2));
+            --btn-sec-bg: rgba(255,255,255,0.1); --btn-sec-border: var(--border-light, rgba(255,255,255,0.2));
+            --item-border: var(--border-color, rgba(255,255,255,0.06)); --item-hover: rgba(255,255,255,0.05);
+            --stat-bg: var(--bg-tertiary, rgba(255,255,255,0.05)); --spinner-border: rgba(255,255,255,0.3);
+        }
+        :root.light-theme {
+            --bg-start: var(--bg-primary, #f5f7fa); --bg-end: var(--bg-secondary, #e4e8ed); --text: var(--text-primary, #1a1a2e); --text-muted: var(--text-muted, #666); --text-sec: var(--text-secondary, #555);
+            --card-bg: var(--bg-card, rgba(255,255,255,0.9)); --card-border: var(--border-color, rgba(0,0,0,0.1));
+            --input-bg: var(--bg-primary, rgba(255,255,255,0.9)); --input-border: var(--border-light, rgba(0,0,0,0.15));
+            --btn-sec-bg: rgba(0,0,0,0.05); --btn-sec-border: var(--border-light, rgba(0,0,0,0.15));
+            --item-border: var(--border-color, rgba(0,0,0,0.06)); --item-hover: rgba(0,0,0,0.03);
+            --stat-bg: var(--bg-tertiary, rgba(0,0,0,0.03)); --spinner-border: rgba(0,0,0,0.2);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, var(--bg-start), var(--bg-end)); min-height: 100vh; color: var(--text); padding: 20px; user-select: none; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px; margin-bottom: 15px; }
+        .card-title { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .form-group { flex: 1; min-width: 100px; }
+        .form-group label { display: block; font-size: 0.8rem; color: var(--text-sec); margin-bottom: 5px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--text); font-size: 0.85rem; outline: none; resize: vertical; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #00d4ff; }
+        .preset-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+        .preset-btn { padding: 5px 10px; font-size: 0.75rem; background: rgba(0,212,255,0.15); border: 1px solid rgba(0,212,255,0.3); border-radius: 5px; color: #00d4ff; cursor: pointer; }
+        .preset-btn:hover { background: rgba(0,212,255,0.25); }
+        .btn-group { display: flex; gap: 10px; }
+        .btn { padding: 10px 20px; font-size: 0.85rem; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: linear-gradient(135deg, #00d4ff, #00ff88); color: #fff; flex: 1; }
+        .btn-secondary { background: var(--btn-sec-bg); color: var(--text); border: 1px solid var(--btn-sec-border); }
+        .btn-small { padding: 6px 12px; font-size: 0.75rem; }
+        .btn:hover:not(:disabled) { transform: translateY(-1px); opacity: 0.9; }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; }
+        .checkbox-group input[type="checkbox"] { width: 16px; height: 16px; }
+        .checkbox-group label { font-size: 0.8rem; color: var(--text-sec); }
+
+        /* 主标签页 */
+        .main-tabs { display: flex; gap: 5px; margin-bottom: 15px; }
+        .main-tab { padding: 10px 20px; font-size: 0.85rem; background: var(--btn-sec-bg); border: 1px solid var(--btn-sec-border); border-radius: 8px 8px 0 0; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+        .main-tab:hover { background: var(--stat-bg); }
+        .main-tab.active { background: var(--card-bg); border-bottom-color: transparent; color: #00d4ff; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 15px; }
+        .stat-card { background: var(--stat-bg); border-radius: 8px; padding: 12px; text-align: center; }
+        .stat-value { font-size: 1.2rem; font-weight: 600; margin-bottom: 3px; }
+        .stat-value.hops { color: #00d4ff; }
+        .stat-value.success { color: #00ff88; }
+        .stat-value.timeout { color: #ff4757; }
+        .stat-value.time { color: #ffa502; }
+        .stat-value.jitter { color: #a29bfe; }
+        .stat-label { font-size: 0.7rem; color: var(--text-muted); }
+
+        .chart-container { background: var(--stat-bg); border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .chart-title { font-size: 0.85rem; color: var(--text-muted); }
+        .chart-legend { display: flex; gap: 15px; font-size: 0.7rem; }
+        .legend-item { display: flex; align-items: center; gap: 5px; color: var(--text-muted); }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .legend-dot.avg { background: #00d4ff; }
+        .legend-dot.max { background: #ff6b6b; }
+        .legend-dot.min { background: #00ff88; }
+        #latencyChart { width: 100%; height: 150px; }
+
+        .results-section { display: none; }
+        .results-section.show { display: block; }
+        .results-scroll { max-height: 300px; overflow-y: auto; }
+        .results-scroll::-webkit-scrollbar { width: 5px; }
+        .results-scroll::-webkit-scrollbar-track { background: var(--stat-bg); }
+        .results-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+
+        .hop-item { display: grid; grid-template-columns: 35px 130px 1fr 180px 25px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--item-border); font-size: 0.8rem; gap: 10px; }
+        .hop-item:hover { background: var(--item-hover); }
+        .hop-num { font-weight: 600; color: #00d4ff; }
+        .hop-ip { font-family: 'Consolas', monospace; }
+        .hop-host { color: var(--text-sec); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hop-times { display: flex; gap: 5px; justify-content: flex-end; }
+        .hop-time { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; min-width: 48px; text-align: center; }
+        .hop-time.success { background: rgba(0,255,136,0.15); color: #00ff88; }
+        .hop-time.timeout { background: rgba(255,71,87,0.15); color: #ff4757; }
+        .status-icon { width: 14px; height: 14px; }
+        .status-icon.success { color: #00ff88; }
+        .status-icon.timeout { color: #ff4757; }
+
+        .route-visual { margin-bottom: 15px; padding: 15px; background: var(--stat-bg); border-radius: 8px; }
+        .route-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .route-header-left { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; }
+        .route-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; }
+        .route-badge.start { background: rgba(0,212,255,0.15); color: #00d4ff; }
+        .route-badge.end { background: rgba(0,255,136,0.15); color: #00ff88; }
+        .route-badge.hops { background: var(--card-bg); color: var(--text-muted); }
+        .route-badge.hops span { color: #00d4ff; font-weight: 600; }
+        .route-path-container { overflow-x: auto; padding: 10px 0; }
+        .route-path-container::-webkit-scrollbar { height: 4px; }
+        .route-path-container::-webkit-scrollbar-track { background: transparent; }
+        .route-path-container::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 2px; }
+        .route-path-container::-webkit-scrollbar-thumb:hover { background: rgba(0,212,255,0.5); }
+        .route-path { display: flex; align-items: center; min-width: max-content; padding: 5px 0; }
+        .route-node { display: flex; flex-direction: column; align-items: center; position: relative; }
+        .route-node-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; position: relative; z-index: 2; transition: transform 0.2s; cursor: default; }
+        .route-node-circle:hover { transform: scale(1.15); }
+        .route-node-circle.start { background: linear-gradient(135deg, #00d4ff, #0099cc); color: #fff; box-shadow: 0 2px 8px rgba(0,212,255,0.4); }
+        .route-node-circle.end { background: linear-gradient(135deg, #00ff88, #00cc6a); color: #fff; box-shadow: 0 2px 8px rgba(0,255,136,0.4); }
+        .route-node-circle.hop { background: var(--card-bg); border: 2px solid #00d4ff; color: #00d4ff; }
+        .route-node-circle.timeout { background: var(--card-bg); border: 2px dashed #ff4757; color: #ff4757; }
+        .route-node-circle svg { width: 16px; height: 16px; fill: currentColor; }
+        .route-node-label { font-size: 0.6rem; color: var(--text-muted); margin-top: 6px; max-width: 70px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .route-node-time { font-size: 0.55rem; color: var(--text-sec); margin-top: 2px; }
+        .route-connector { width: 30px; height: 2px; background: linear-gradient(90deg, #00d4ff, #00ff88); position: relative; }
+        .route-connector.timeout { background: #ff4757; opacity: 0.5; }
+        .route-connector::after { content: ''; position: absolute; right: -3px; top: -3px; border: solid #00ff88; border-width: 0 2px 2px 0; padding: 3px; transform: rotate(-45deg); }
+        .route-connector.timeout::after { border-color: #ff4757; }
+
+        .spinner { width: 16px; height: 16px; border: 2px solid var(--spinner-border); border-top-color: var(--text); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .empty-result { text-align: center; padding: 30px; color: var(--text-muted); font-size: 0.85rem; }
+
+        .theme-toggle { position: fixed; top: 15px; right: 15px; width: 36px; height: 36px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .theme-toggle:hover { transform: scale(1.1); }
+        .theme-toggle svg { width: 18px; height: 18px; fill: currentColor; }
+
+        /* MTR 模式 */
+        .mtr-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+        .mtr-table th, .mtr-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--item-border); }
+        .mtr-table th { color: var(--text-muted); font-weight: 500; background: var(--stat-bg); position: sticky; top: 0; }
+        .mtr-table td { font-family: 'Consolas', monospace; }
+        .mtr-table tr:hover td { background: var(--item-hover); }
+        .mtr-loss { font-weight: 600; }
+        .mtr-loss.good { color: #00ff88; }
+        .mtr-loss.warn { color: #ffa502; }
+        .mtr-loss.bad { color: #ff4757; }
+        .mtr-bar { height: 4px; background: var(--item-border); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+        .mtr-bar-fill { height: 100%; background: linear-gradient(90deg, #00ff88, #00d4ff); transition: width 0.3s; }
+        .mtr-progress { display: flex; align-items: center; gap: 15px; padding: 12px 15px; background: var(--stat-bg); border-radius: 8px; margin-bottom: 15px; }
+        .mtr-progress-text { font-size: 0.8rem; color: var(--text-muted); }
+        .mtr-progress-text span { color: #00d4ff; font-weight: 600; }
+        .mtr-progress-bar { flex: 1; height: 4px; background: var(--item-border); border-radius: 2px; overflow: hidden; }
+        .mtr-progress-bar-fill { height: 100%; background: linear-gradient(90deg, #00d4ff, #00ff88); transition: width 0.3s; }
+
+        /* 帮助按钮和弹窗 */
+        .help-toggle { position: fixed; top: 15px; right: 60px; width: 36px; height: 36px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 1000; font-size: 1.1rem; font-weight: 600; }
+        .help-toggle:hover { transform: scale(1.1); background: rgba(0,212,255,0.2); }
+        .help-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; justify-content: center; align-items: center; padding: 20px; }
+        .help-modal.show { display: flex; }
+        .help-content { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; max-width: 600px; max-height: 80vh; overflow-y: auto; padding: 25px; position: relative; backdrop-filter: blur(10px); }
+        .help-content::-webkit-scrollbar { width: 5px; }
+        .help-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+        .help-close { position: absolute; top: 15px; right: 15px; width: 28px; height: 28px; border-radius: 50%; background: var(--btn-sec-bg); border: none; color: var(--text); cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; }
+        .help-close:hover { background: rgba(255,71,87,0.3); }
+        .help-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; color: #00d4ff; }
+        .help-section { margin-bottom: 20px; }
+        .help-section h3 { font-size: 0.9rem; color: #00ff88; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .help-section p, .help-section li { font-size: 0.8rem; color: var(--text-sec); line-height: 1.6; }
+        .help-section ul { padding-left: 20px; margin-top: 8px; }
+        .help-section li { margin-bottom: 6px; }
+        .help-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-right: 5px; }
+        .help-tag.blue { background: rgba(0,212,255,0.2); color: #00d4ff; }
+        .help-tag.green { background: rgba(0,255,136,0.2); color: #00ff88; }
+        .help-tag.red { background: rgba(255,71,87,0.2); color: #ff4757; }
+        .help-tag.orange { background: rgba(255,165,2,0.2); color: #ffa502; }
+
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .hop-item { grid-template-columns: 30px 100px 1fr 25px; }
+            .hop-times { display: none; }
+            .compare-container { grid-template-columns: 1fr; }
+            .main-tab { padding: 8px 12px; font-size: 0.8rem; }
+            .help-toggle { right: 55px; }
+        }
+
+        /* ==================== 风格简化覆盖 ==================== */
+        .theme-toggle, .help-toggle { display: none !important; }
+        body {
+            background: var(--bg-start) !important;
+            padding-top: 48px !important;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg-start);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+        .btn-primary {
+            background: #2563eb !important;
+            box-shadow: none !important;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #1d4ed8 !important;
+        }
+        .route-node-circle.start,
+        .route-node-circle.end {
+            background: #2563eb !important;
+            box-shadow: none !important;
+        }
+        .mtr-progress-bar-fill {
+            background: #2563eb !important;
+        }
+
+        /* ==================== Trippy 模式 ==================== */
+        .trippy-config { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        @media (max-width: 800px) { .trippy-config { grid-template-columns: 1fr 1fr; } }
+        .trippy-options { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 12px; }
+        .trippy-options label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+        .trippy-options select { padding: 4px 8px; font-size: 0.78rem; background: var(--input-bg); border: 1px solid var(--input-border); color: var(--text); border-radius: 4px; }
+        .trippy-status { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--stat-bg); border-radius: 6px; font-size: 0.8rem; color: var(--text-sec); margin-bottom: 12px; }
+        .trippy-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+        .trippy-status-dot.discovering { background: #f59e0b; animation: blink 1s infinite; }
+        .trippy-status-dot.probing { background: #22c55e; }
+        .trippy-status-dot.error { background: #ef4444; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+
+        .trippy-table-wrap { background: var(--stat-bg); border-radius: 8px; overflow: auto; max-height: 480px; }
+        .trippy-table { width: 100%; border-collapse: collapse; font-size: 0.72rem; min-width: 900px; }
+        .trippy-table th { position: sticky; top: 0; background: var(--card-bg); padding: 8px 6px; text-align: left; font-weight: 500; color: var(--text-muted); border-bottom: 1px solid var(--item-border); z-index: 1; font-size: 0.7rem; }
+        .trippy-table td { padding: 6px; border-bottom: 1px solid var(--item-border); font-family: 'Consolas', monospace; vertical-align: middle; }
+        .trippy-table tr:hover td { background: var(--item-hover); }
+        .trippy-table .col-num { text-align: right; }
+        .trippy-table .col-loss { font-weight: 600; }
+        .trippy-table .col-loss.warn { color: #f59e0b; }
+        .trippy-table .col-loss.bad { color: #ef4444; }
+        .trippy-table .col-loss.good { color: #22c55e; }
+        .trippy-table .col-host { color: var(--text); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .trippy-table .col-asn { color: var(--text-muted); font-size: 0.68rem; }
+        .trippy-table .col-asn .asn-num { color: var(--text-sec); font-weight: 500; }
+        .trippy-table .col-asn .country { display: inline-block; padding: 1px 5px; border-radius: 3px; background: rgba(127,127,127,0.15); margin-right: 4px; font-size: 0.65rem; }
+        .trippy-table .timeout-cell { color: var(--text-muted); font-style: italic; }
+
+        /* 直方图 */
+        .histogram { display: flex; align-items: flex-end; gap: 1px; height: 24px; min-width: 80px; }
+        .histogram-bar { flex: 1; min-width: 2px; background: #2563eb; border-radius: 1px 1px 0 0; transition: height 0.2s; opacity: 0.85; }
+        .histogram-bar.fast { background: #22c55e; }
+        .histogram-bar.slow { background: #f59e0b; }
+        .histogram-bar.very-slow { background: #ef4444; }
+        .histogram-empty { color: var(--text-muted); font-style: italic; font-size: 0.7rem; }
+
+        /* Trippy 限制提示 */
+        .trippy-notice {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            padding: 10px 12px;
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            line-height: 1.5;
+            color: var(--text-sec);
+        }
+        .trippy-notice-icon {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #f59e0b;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.75rem;
+            margin-top: 1px;
+        }
+        .trippy-notice-body { flex: 1; }
+        .trippy-notice-body strong {
+            display: block;
+            color: #f59e0b;
+            margin-bottom: 4px;
+            font-size: 0.78rem;
+        }
+        .trippy-notice-body ul {
+            margin: 0;
+            padding-left: 16px;
+        }
+        .trippy-notice-body li { margin-bottom: 2px; }
+        .trippy-notice-body code {
+            background: rgba(127, 127, 127, 0.15);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.72rem;
+            font-family: 'Consolas', monospace;
+        }
+        .trippy-notice-body em {
+            color: var(--text);
+            font-style: normal;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <button class="help-toggle" id="helpToggle" title="使用说明">?</button>
+    <button class="theme-toggle" id="themeToggle" title="切换主题">
+        <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+
+    <!-- 帮助弹窗 -->
+    <div class="help-modal" id="helpModal">
+        <div class="help-content">
+            <button class="help-close" onclick="toggleHelp()">×</button>
+            <div class="help-title">路由追踪工具 - 使用说明</div>
+            
+            <div class="help-section">
+                <h3>一、路由追踪（基础模式）</h3>
+                <p>显示数据包从本机到目标经过的所有路由节点。</p>
+                <ul>
+                    <li><span class="help-tag blue">目标主机</span>输入 IP 地址或域名，或点击预设按钮快速填充</li>
+                    <li><span class="help-tag blue">最大跳数</span>限制追踪距离，默认 30 跳足够大多数场景</li>
+                    <li><span class="help-tag blue">超时</span>每个跳点的等待时间，超过则标记为超时</li>
+                    <li><span class="help-tag green">DNS反向解析</span>将 IP 解析为主机名，便于识别节点归属</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>二、MTR 模式（多轮统计）</h3>
+                <p>多次重复追踪同一目标，统计丢包率和延迟分布。</p>
+                <ul>
+                    <li><span class="help-tag blue">追踪轮数</span>执行次数，轮数越多统计越精确</li>
+                    <li><span class="help-tag green">丢包率 0%</span>网络正常</li>
+                    <li><span class="help-tag orange">丢包率 1-20%</span>可能存在拥塞</li>
+                    <li><span class="help-tag red">丢包率 >20%</span>网络问题严重，需排查</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>三、结果解读</h3>
+                <ul>
+                    <li><span class="help-tag blue">跳数</span>数据包经过的路由器数量，越少越好</li>
+                    <li><span class="help-tag green">延迟</span>数据往返时间，越低越好（国内 <50ms 正常）</li>
+                    <li><span class="help-tag orange">抖动</span>延迟波动程度，越低越稳定</li>
+                    <li><span class="help-tag red">超时 (*)</span>该跳点未响应，可能禁 ping 或故障</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>四、常见问题</h3>
+                <ul>
+                    <li><strong>中间跳点超时但能到达终点？</strong>正常现象，部分路由器禁止 ICMP 响应</li>
+                    <li><strong>延迟突然变高？</strong>关注哪个跳点开始变高，该节点可能是瓶颈</li>
+                    <li><strong>为什么用 MTR？</strong>单次追踪可能偶然超时，MTR 多轮统计更准确</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h3>五、快捷键</h3>
+                <ul>
+                    <li>点击 <span class="help-tag blue">预设按钮</span> 快速填充常用目标</li>
+                    <li>点击右上角 <span class="help-tag blue">月亮图标</span> 切换深色/浅色主题</li>
+                    <li>点击 <span class="help-tag green">导出</span> 保存追踪结果为文本文件</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 主标签页 -->
+        <div class="main-tabs">
+            <button class="main-tab active" data-tab="trace">路由追踪</button>
+            <button class="main-tab" data-tab="mtr">MTR 模式</button>
+            <button class="main-tab" data-tab="trippy">Trippy 模式</button>
+        </div>
+
+        <!-- 路由追踪面板 -->
+        <div class="tab-panel active" id="panel-trace">
+            <div class="card">
+                <div class="card-title">追踪配置</div>
+                <div class="preset-btns">
+                    <button class="preset-btn" data-host="223.5.5.5">阿里DNS</button>
+                    <button class="preset-btn" data-host="119.29.29.29">腾讯DNS</button>
+                    <button class="preset-btn" data-host="114.114.114.114">114DNS</button>
+                    <button class="preset-btn" data-host="8.8.8.8">Google DNS</button>
+                    <button class="preset-btn" data-host="baidu.com">百度</button>
+                    <button class="preset-btn" data-host="qq.com">腾讯</button>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label>目标主机</label>
+                        <input type="text" id="hostInput" placeholder="IP 地址或域名" value="223.5.5.5">
+                    </div>
+                    <div class="form-group">
+                        <label>最大跳数</label>
+                        <input type="number" id="maxHopsInput" value="30" min="1" max="64">
+                    </div>
+                    <div class="form-group">
+                        <label>超时 (ms)</label>
+                        <input type="number" id="timeoutInput" value="3000" min="500" max="30000">
+                    </div>
+                </div>
+                <div class="form-row" style="align-items: center;">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="resolveDns" checked>
+                        <label for="resolveDns">DNS反向解析</label>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="traceBtn" onclick="startTrace()">开始追踪</button>
+                    <button class="btn btn-secondary" id="stopBtn" onclick="stopTrace()" disabled>停止</button>
+                    <button class="btn btn-secondary" id="exportBtn" onclick="exportResults()" disabled>导出</button>
+                </div>
+            </div>
+
+            <div class="card results-section" id="resultsSection">
+                <div class="route-visual">
+                    <div class="route-header">
+                        <div class="route-header-left">
+                            <span class="route-badge start">本机</span>
+                            <span style="color: var(--text-muted)">→</span>
+                            <span class="route-badge hops"><span id="hopsBadge">0</span> 跳</span>
+                            <span style="color: var(--text-muted)">→</span>
+                            <span class="route-badge end" id="destHost">--</span>
+                        </div>
+                    </div>
+                    <div class="route-path-container">
+                        <div class="route-path" id="routePath">
+                            <div class="route-node">
+                                <div class="route-node-circle start"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></div>
+                                <div class="route-node-label">本机</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-value hops" id="totalHops">0</div><div class="stat-label">总跳数</div></div>
+                    <div class="stat-card"><div class="stat-value success" id="successHops">0</div><div class="stat-label">成功</div></div>
+                    <div class="stat-card"><div class="stat-value timeout" id="timeoutHops">0</div><div class="stat-label">超时</div></div>
+                    <div class="stat-card"><div class="stat-value time" id="avgLatency">0</div><div class="stat-label">平均延迟(ms)</div></div>
+                    <div class="stat-card"><div class="stat-value jitter" id="jitterValue">0</div><div class="stat-label">抖动(ms)</div></div>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">延迟趋势图</span>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="legend-dot avg"></span>平均</span>
+                            <span class="legend-item"><span class="legend-dot max"></span>最大</span>
+                            <span class="legend-item"><span class="legend-dot min"></span>最小</span>
+                        </div>
+                    </div>
+                    <canvas id="latencyChart"></canvas>
+                </div>
+
+                <div class="card-title"><span>详细路由</span><button class="btn btn-secondary btn-small" onclick="clearResults()">清空</button></div>
+                <div class="results-scroll" id="resultsScroll"><div class="empty-result">暂无结果</div></div>
+            </div>
+        </div>
+
+        <!-- MTR 模式面板 -->
+        <div class="tab-panel" id="panel-mtr">
+            <div class="card">
+                <div class="card-title">MTR 模式</div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 15px;">多轮追踪统计，显示丢包率和延迟分布</p>
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label>目标主机</label>
+                        <input type="text" id="mtrHost" placeholder="IP 地址或域名" value="223.5.5.5">
+                    </div>
+                    <div class="form-group">
+                        <label>追踪轮数</label>
+                        <input type="number" id="mtrRounds" value="10" min="3" max="50">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="mtrBtn" onclick="runMtr()">开始 MTR</button>
+                    <button class="btn btn-secondary" id="mtrStopBtn" onclick="stopMtr()" disabled>停止</button>
+                </div>
+            </div>
+
+            <div class="card" id="mtrResults" style="display: none;">
+                <div class="route-visual">
+                    <div class="route-header">
+                        <div class="route-header-left">
+                            <span class="route-badge start">本机</span>
+                            <span style="color: var(--text-muted)">→</span>
+                            <span class="route-badge hops"><span id="mtrHopsBadge">0</span> 跳</span>
+                            <span style="color: var(--text-muted)">→</span>
+                            <span class="route-badge end" id="mtrDestHost">--</span>
+                        </div>
+                    </div>
+                    <div class="route-path-container">
+                        <div class="route-path" id="mtrRoutePath">
+                            <div class="route-node">
+                                <div class="route-node-circle start"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></div>
+                                <div class="route-node-label">本机</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-value hops" id="mtrTotalHops">0</div><div class="stat-label">跳数</div></div>
+                    <div class="stat-card"><div class="stat-value success" id="mtrTotalSent">0</div><div class="stat-label">总发送</div></div>
+                    <div class="stat-card"><div class="stat-value timeout" id="mtrTotalLoss">0%</div><div class="stat-label">总丢包</div></div>
+                    <div class="stat-card"><div class="stat-value time" id="mtrAvgLatency">0</div><div class="stat-label">平均延迟(ms)</div></div>
+                    <div class="stat-card"><div class="stat-value jitter" id="mtrMaxLatency">0</div><div class="stat-label">最大延迟(ms)</div></div>
+                </div>
+
+                <div class="mtr-progress">
+                    <span class="mtr-progress-text">进度: <span id="mtrRoundNum">0/10</span></span>
+                    <div class="mtr-progress-bar"><div class="mtr-progress-bar-fill" id="mtrProgressBar" style="width: 0%"></div></div>
+                </div>
+                <div class="results-scroll" style="max-height: 250px;">
+                    <table class="mtr-table">
+                        <thead>
+                            <tr><th>#</th><th>IP 地址</th><th>丢包率</th><th>已发</th><th>已收</th><th>平均</th><th>最小</th><th>最大</th></tr>
+                        </thead>
+                        <tbody id="mtrTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trippy 模式面板 -->
+        <div class="tab-panel" id="panel-trippy">
+            <div class="card">
+                <div class="card-title">Trippy 模式 <span style="font-weight:normal; color: var(--text-muted); font-size: 0.75rem;">连续探测 / 逐跳直方图 / 多协议 / ASN&amp;GeoIP</span></div>
+                <div class="trippy-config">
+                    <div class="form-group">
+                        <label>目标主机</label>
+                        <input type="text" id="trippyHost" value="223.5.5.5" placeholder="IP 或域名">
+                    </div>
+                    <div class="form-group">
+                        <label>最大跳数</label>
+                        <input type="number" id="trippyMaxHops" value="30" min="1" max="64">
+                    </div>
+                    <div class="form-group">
+                        <label>探测超时 (ms)</label>
+                        <input type="number" id="trippyTimeout" value="2000" min="500" max="10000">
+                    </div>
+                    <div class="form-group">
+                        <label>探测间隔 (ms)</label>
+                        <input type="number" id="trippyInterval" value="1000" min="200" max="10000">
+                    </div>
+                    <div class="form-group">
+                        <label>端口 (TCP/UDP)</label>
+                        <input type="number" id="trippyPort" value="80" min="1" max="65535">
+                    </div>
+                </div>
+                <div class="trippy-options">
+                    <label>协议：
+                        <select id="trippyProtocol">
+                            <option value="icmp">ICMP</option>
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                        </select>
+                    </label>
+                    <label><input type="checkbox" id="trippyGeoip" checked> 启用 ASN/GeoIP 查询</label>
+                    <label><input type="checkbox" id="trippyRdns" checked> 反向 DNS 解析</label>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="trippyStartBtn" onclick="startTrippy()">开始探测</button>
+                    <button class="btn btn-secondary" id="trippyStopBtn" onclick="stopTrippy()" disabled>停止</button>
+                    <button class="btn btn-secondary" id="trippyExportBtn" onclick="exportTrippy()" disabled>导出 CSV</button>
+                </div>
+                <div class="trippy-notice">
+                    <span class="trippy-notice-icon">!</span>
+                    <div class="trippy-notice-body">
+                        <strong>实现限制</strong>
+                        <ul>
+                            <li>本工具未使用原始套接字，因此每跳的 RTT 是 <em>本机到该跳 IP</em> 的往返时间，<em>非</em>原版 Trippy 的"上一跳到本跳"段时延。</li>
+                            <li>路由发现阶段仍依赖系统 <code>tracert</code> / <code>traceroute</code>。Windows 上协议固定为 ICMP；TCP/UDP 仅影响后续逐跳探测方式。</li>
+                            <li>UDP 探测在 Windows 上可能因系统对 ICMP port unreachable 的处理差异显示为持续超时；推荐使用 ICMP 或 TCP。</li>
+                            <li>ASN/GeoIP 通过免费接口 <code>ip-api.com</code> 查询，每分钟 ≤ 45 次；私有地址不会发起请求。</li>
+                            <li>中间路由器若禁用 ICMP TTL Exceeded 响应，会显示为 "* * *  无响应"，属正常现象。</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="trippy-status" id="trippyStatus">
+                <span class="trippy-status-dot"></span>
+                <span class="status-text">未开始</span>
+            </div>
+
+            <div class="card">
+                <div class="stats-grid" style="margin-bottom: 0;">
+                    <div class="stat-card"><div class="stat-value hops" id="trippyTotalHops">0</div><div class="stat-label">跳数</div></div>
+                    <div class="stat-card"><div class="stat-value success" id="trippyRound">0</div><div class="stat-label">探测轮次</div></div>
+                    <div class="stat-card"><div class="stat-value timeout" id="trippyAvgLoss">0%</div><div class="stat-label">平均丢包</div></div>
+                    <div class="stat-card"><div class="stat-value time" id="trippyAvgLatency">0</div><div class="stat-label">平均延迟(ms)</div></div>
+                    <div class="stat-card"><div class="stat-value jitter" id="trippyWorstHop">--</div><div class="stat-label">最差跳点</div></div>
+                </div>
+            </div>
+
+            <div class="card" style="padding: 8px;">
+                <div class="trippy-table-wrap">
+                    <table class="trippy-table">
+                        <thead>
+                            <tr>
+                                <th class="col-num" style="width:36px;">#</th>
+                                <th style="width:110px;">ASN / 位置</th>
+                                <th style="width:130px;">主机</th>
+                                <th style="width:120px;">IP</th>
+                                <th class="col-num" style="width:50px;">发送</th>
+                                <th class="col-num" style="width:50px;">接收</th>
+                                <th class="col-num" style="width:60px;">丢包率</th>
+                                <th class="col-num" style="width:60px;">最新</th>
+                                <th class="col-num" style="width:60px;">平均</th>
+                                <th class="col-num" style="width:60px;">最小</th>
+                                <th class="col-num" style="width:60px;">最大</th>
+                                <th class="col-num" style="width:60px;">σ</th>
+                                <th style="width:120px;">延迟直方图</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trippyTableBody">
+                            <tr><td colspan="13" style="text-align:center; color:var(--text-muted); padding:24px;">点击「开始探测」以启动 Trippy 模式</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        // ==================== Theme Sync ====================
+        const themeToggle = document.getElementById('themeToggle');
+        function applyTheme(theme) {
+            if (!theme) return;
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+        
+        // Initial Theme load
+        const _qs = new URLSearchParams(location.search);
+        const _qsMode = _qs.get('mode');
+        const _qsTheme = _qs.get('theme');
+        if (_qsMode || _qsTheme) {
+            applyTheme({ mode: _qsMode, key: _qsTheme });
+        } else {
+            ipcRenderer.invoke('theme:get').then(theme => {
+                applyTheme(theme);
+            }).catch(() => {
+                if (localStorage.getItem('traceroute-theme') === 'light') {
+                    applyTheme({ mode: 'light', key: 'light' });
+                }
+            });
+        }
+        
+        themeToggle.addEventListener('click', () => {
+            const isLight = document.documentElement.classList.toggle('light-theme');
+            applyTheme({
+                mode: isLight ? 'light' : 'dark',
+                key: isLight ? 'light' : 'one-dark'
+            });
+            localStorage.setItem('traceroute-theme', isLight ? 'light' : 'dark');
+        });
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+
+        // 帮助弹窗
+        function toggleHelp() {
+            document.getElementById('helpModal').classList.toggle('show');
+        }
+        document.getElementById('helpToggle').addEventListener('click', toggleHelp);
+        document.getElementById('helpModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) toggleHelp();
+        });
+
+        // 主标签页切换
+        document.querySelectorAll('.main-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // ==================== 基础追踪 ====================
+        let isTracing = false, traceResults = [], hostnames = {};
+        let currentMode = null; // 'trace' | 'mtr' - 用于避免监听器冲突
+
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => document.getElementById('hostInput').value = btn.dataset.host);
+        });
+
+        async function resolveHostnames() {
+            if (!document.getElementById('resolveDns').checked) return;
+            for (const r of traceResults) {
+                if (r.ip && !hostnames[r.ip]) {
+                    try {
+                        const hostname = await ipcRenderer.invoke('traceroute:reverseDns', r.ip);
+                        if (hostname) { hostnames[r.ip] = hostname; updateHopHostname(r.hop, hostname); }
+                    } catch (e) {}
+                }
+            }
+        }
+
+        function updateHopHostname(hop, hostname) {
+            const el = document.querySelector(`.hop-item[data-hop="${hop}"] .hop-host`);
+            if (el) { el.textContent = hostname; el.title = hostname; }
+        }
+
+        function calculateJitter(times) {
+            const valid = times.filter(t => t > 0);
+            if (valid.length < 2) return 0;
+            const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
+            return Math.sqrt(valid.reduce((sum, t) => sum + Math.pow(t - avg, 2), 0) / valid.length);
+        }
+
+        async function startTrace() {
+            const host = document.getElementById('hostInput').value.trim();
+            const maxHops = parseInt(document.getElementById('maxHopsInput').value) || 30;
+            const timeout = parseInt(document.getElementById('timeoutInput').value) || 3000;
+            if (!host) { alert('请输入目标主机'); return; }
+            if (mtrRunning) { alert('MTR 正在运行，请先停止'); return; }
+            if (trippyRunning) { alert('Trippy 正在运行，请先停止'); return; }
+
+            currentMode = 'trace';
+            isTracing = true; traceResults = []; hostnames = {};
+            updateUI();
+            document.getElementById('resultsSection').classList.add('show');
+            document.getElementById('resultsScroll').innerHTML = '';
+            document.getElementById('exportBtn').disabled = true;
+            resetRouteVisual(); updateStats();
+            document.getElementById('destHost').textContent = host;
+
+            try { await ipcRenderer.invoke('traceroute:start', { host, maxHops, timeout, protocol: 'icmp' }); }
+            catch (err) { console.error('路由追踪失败:', err); }
+
+            await resolveHostnames();
+            drawLatencyChart();
+            isTracing = false;
+            updateUI();
+            document.getElementById('exportBtn').disabled = traceResults.length === 0;
+        }
+
+        function stopTrace() {
+            ipcRenderer.invoke('traceroute:stop');
+            isTracing = false;
+            updateUI();
+            document.getElementById('exportBtn').disabled = traceResults.length === 0;
+        }
+
+        function clearResults() {
+            traceResults = []; hostnames = {};
+            document.getElementById('resultsScroll').innerHTML = '<div class="empty-result">暂无结果</div>';
+            document.getElementById('exportBtn').disabled = true;
+            resetRouteVisual(); updateStats();
+            try { drawLatencyChart(); } catch(e) {}
+        }
+
+        function resetRouteVisual() {
+            document.getElementById('hopsBadge').textContent = '0';
+            document.getElementById('destHost').textContent = '--';
+            document.getElementById('routePath').innerHTML = `<div class="route-node"><div class="route-node-circle start"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></div><div class="route-node-label">本机</div></div>`;
+        }
+
+        function updateRouteSummary() {
+            document.getElementById('hopsBadge').textContent = traceResults.length;
+        }
+
+        function addRouteNode(result) {
+            const path = document.getElementById('routePath');
+            // 添加连接线
+            const connector = document.createElement('div');
+            connector.className = 'route-connector' + (result.timeout ? ' timeout' : '');
+            path.appendChild(connector);
+            // 添加节点
+            const node = document.createElement('div');
+            node.className = 'route-node';
+            const avgTime = result.times.filter(t => t > 0).length > 0 ? Math.round(result.times.filter(t => t > 0).reduce((a,b) => a+b, 0) / result.times.filter(t => t > 0).length) : 0;
+            node.innerHTML = `<div class="route-node-circle ${result.timeout ? 'timeout' : 'hop'}" title="${result.ip || '*'}">${result.hop}</div><div class="route-node-label">${result.ip || '*'}</div>${!result.timeout && avgTime > 0 ? `<div class="route-node-time">${avgTime}ms</div>` : ''}`;
+            path.appendChild(node);
+            // 滚动到最右
+            const container = path.parentElement;
+            container.scrollLeft = container.scrollWidth;
+        }
+
+        function addEndNode(host) {
+            const path = document.getElementById('routePath');
+            const connector = document.createElement('div');
+            connector.className = 'route-connector';
+            path.appendChild(connector);
+            const node = document.createElement('div');
+            node.className = 'route-node';
+            node.innerHTML = `<div class="route-node-circle end"><svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div><div class="route-node-label">${host}</div>`;
+            path.appendChild(node);
+            const container = path.parentElement;
+            container.scrollLeft = container.scrollWidth;
+        }
+
+        // IPC
+        ipcRenderer.on('traceroute:hop', (e, result) => {
+            if (currentMode === 'trace') {
+                traceResults.push(result); updateStats(); appendHop(result); updateRouteSummary(); addRouteNode(result);
+            }
+        });
+        ipcRenderer.on('traceroute:complete', (e, data) => {
+            if (currentMode === 'trace' && data && data.reached) {
+                addEndNode(document.getElementById('hostInput').value.trim());
+            }
+        });
+
+        function updateStats() {
+            document.getElementById('totalHops').textContent = traceResults.length;
+            document.getElementById('successHops').textContent = traceResults.filter(r => !r.timeout).length;
+            document.getElementById('timeoutHops').textContent = traceResults.filter(r => r.timeout).length;
+            const times = traceResults.filter(r => !r.timeout).flatMap(r => r.times.filter(t => t > 0));
+            document.getElementById('avgLatency').textContent = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+            document.getElementById('jitterValue').textContent = Math.round(calculateJitter(times));
+        }
+
+        function appendHop(result) {
+            const c = document.getElementById('resultsScroll');
+            if (c.querySelector('.empty-result')) c.innerHTML = '';
+            const item = document.createElement('div'); item.className = 'hop-item'; item.dataset.hop = result.hop;
+            const timesHtml = result.times.map(t => t === -1 || t === '*' ? '<span class="hop-time timeout">*</span>' : `<span class="hop-time success">${t} ms</span>`).join('');
+            item.innerHTML = `<span class="hop-num">${result.hop}</span><span class="hop-ip">${result.ip || '*'}</span><span class="hop-host"></span><span class="hop-times">${timesHtml}</span><span>${result.timeout ? '<svg class="status-icon timeout" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/></svg>' : '<svg class="status-icon success" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/></svg>'}</span>`;
+            c.appendChild(item); c.scrollTop = c.scrollHeight;
+        }
+
+        function updateUI() {
+            const traceBtn = document.getElementById('traceBtn'), stopBtn = document.getElementById('stopBtn');
+            if (isTracing) { traceBtn.disabled = true; traceBtn.innerHTML = '<div class="spinner"></div> 追踪中...'; stopBtn.disabled = false; }
+            else { traceBtn.disabled = false; traceBtn.innerHTML = '开始追踪'; stopBtn.disabled = true; }
+        }
+
+        function drawLatencyChart() {
+            const canvas = document.getElementById('latencyChart'), ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1, rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            const width = rect.width, height = rect.height, padding = { top: 20, right: 20, bottom: 30, left: 50 };
+            const chartW = width - padding.left - padding.right, chartH = height - padding.top - padding.bottom;
+            ctx.clearRect(0, 0, width, height);
+            
+            const validResults = traceResults.filter(r => !r.timeout && r.times.some(t => t > 0));
+            if (validResults.length === 0) { ctx.fillStyle = '#888'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('暂无延迟数据', width / 2, height / 2); return; }
+            
+            const data = validResults.map(r => { const vt = r.times.filter(t => t > 0); return { hop: r.hop, avg: vt.reduce((a, b) => a + b, 0) / vt.length, min: Math.min(...vt), max: Math.max(...vt) }; });
+            const yMax = Math.ceil(Math.max(...data.map(d => d.max)) * 1.2 / 10) * 10 || 100;
+            
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1;
+            for (let i = 0; i <= 5; i++) { const y = padding.top + (chartH / 5) * i; ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(width - padding.right, y); ctx.stroke(); ctx.fillStyle = '#888'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillText(Math.round(yMax - (yMax / 5) * i) + ' ms', padding.left - 5, y + 4); }
+            
+            const xStep = chartW / Math.max(data.length - 1, 1);
+            ctx.beginPath(); data.forEach((d, i) => { const x = padding.left + i * xStep, y = padding.top + chartH - (d.max / yMax) * chartH; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+            for (let i = data.length - 1; i >= 0; i--) { ctx.lineTo(padding.left + i * xStep, padding.top + chartH - (data[i].min / yMax) * chartH); }
+            ctx.closePath(); ctx.fillStyle = 'rgba(0,212,255,0.1)'; ctx.fill();
+            
+            ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 1.5; ctx.beginPath(); data.forEach((d, i) => { const x = padding.left + i * xStep, y = padding.top + chartH - (d.max / yMax) * chartH; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }); ctx.stroke();
+            ctx.strokeStyle = '#00ff88'; ctx.beginPath(); data.forEach((d, i) => { const x = padding.left + i * xStep, y = padding.top + chartH - (d.min / yMax) * chartH; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }); ctx.stroke();
+            ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 2; ctx.beginPath(); data.forEach((d, i) => { const x = padding.left + i * xStep, y = padding.top + chartH - (d.avg / yMax) * chartH; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }); ctx.stroke();
+            data.forEach((d, i) => { ctx.fillStyle = '#00d4ff'; ctx.beginPath(); ctx.arc(padding.left + i * xStep, padding.top + chartH - (d.avg / yMax) * chartH, 4, 0, Math.PI * 2); ctx.fill(); });
+            ctx.fillStyle = '#888'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+            data.forEach((d, i) => { if (data.length <= 15 || i % Math.ceil(data.length / 15) === 0) ctx.fillText(d.hop, padding.left + i * xStep, height - 10); });
+        }
+
+        function exportResults() {
+            if (traceResults.length === 0) return;
+            const host = document.getElementById('hostInput').value.trim();
+            const times = traceResults.filter(r => !r.timeout).flatMap(r => r.times.filter(t => t > 0));
+            const avgLatency = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+            let content = `路由追踪报告\n================\n目标: ${host}\n时间: ${new Date().toLocaleString('zh-CN')}\n\n统计:\n  总跳数: ${traceResults.length}\n  成功: ${traceResults.filter(r => !r.timeout).length}\n  超时: ${traceResults.filter(r => r.timeout).length}\n  平均延迟: ${avgLatency}ms\n  抖动: ${Math.round(calculateJitter(times))}ms\n\n详细路由:\n---------\n`;
+            traceResults.forEach(r => { content += `${r.hop.toString().padStart(2)}  ${(r.ip || '*').padEnd(16)}  ${r.times.map(t => t === -1 ? '*' : `${t}ms`).join('  ').padEnd(25)}  ${hostnames[r.ip] || ''}\n`; });
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `traceroute_${host}_${Date.now()}.txt`; a.click();
+        }
+
+        // ==================== MTR 模式 ====================
+        let mtrData = {}, mtrRunning = false, mtrAbort = false, mtrRound = 0;
+
+        async function runMtr() {
+            const host = document.getElementById('mtrHost').value.trim();
+            const rounds = parseInt(document.getElementById('mtrRounds').value) || 10;
+            if (!host) { alert('请输入目标主机'); return; }
+            if (isTracing) { alert('路由追踪正在运行，请先停止'); return; }
+            if (trippyRunning) { alert('Trippy 正在运行，请先停止'); return; }
+
+            currentMode = 'mtr';
+            mtrRunning = true; mtrAbort = false; mtrData = {}; mtrRound = 0;
+            document.getElementById('mtrBtn').disabled = true;
+            document.getElementById('mtrStopBtn').disabled = false;
+            document.getElementById('mtrResults').style.display = 'block';
+            document.getElementById('mtrRoundNum').textContent = `0/${rounds}`;
+            document.getElementById('mtrTableBody').innerHTML = '';
+            document.getElementById('mtrDestHost').textContent = host;
+            resetMtrRoutePath();
+            updateMtrStats();
+
+            for (let r = 0; r < rounds && !mtrAbort; r++) {
+                mtrRound = r + 1;
+                document.getElementById('mtrRoundNum').textContent = `${mtrRound}/${rounds}`;
+                
+                const result = await doMtrTrace(host);
+                updateMtrData(result);
+                renderMtrTable();
+                renderMtrRoutePath(host);
+                updateMtrStats();
+                
+                // 完成后更新进度条
+                document.getElementById('mtrProgressBar').style.width = (mtrRound / rounds * 100) + '%';
+                
+                if (r < rounds - 1 && !mtrAbort) await new Promise(r => setTimeout(r, 1000));
+            }
+
+            mtrRunning = false;
+            document.getElementById('mtrBtn').disabled = false;
+            document.getElementById('mtrStopBtn').disabled = true;
+        }
+
+        function stopMtr() {
+            mtrAbort = true;
+            ipcRenderer.invoke('traceroute:stop');
+        }
+
+        async function doMtrTrace(host) {
+            return new Promise(resolve => {
+                const results = [];
+                const hopHandler = (e, r) => results.push(r);
+                const completeHandler = () => { ipcRenderer.removeListener('traceroute:hop', hopHandler); resolve(results); };
+                ipcRenderer.on('traceroute:hop', hopHandler);
+                ipcRenderer.once('traceroute:complete', completeHandler);
+                ipcRenderer.invoke('traceroute:start', { host, maxHops: 30, timeout: 3000, protocol: 'icmp' });
+            });
+        }
+
+        function updateMtrData(results) {
+            results.forEach(r => {
+                const key = r.hop;
+                if (!mtrData[key]) {
+                    mtrData[key] = { hop: r.hop, ip: r.ip || '*', sent: 0, recv: 0, times: [] };
+                }
+                if (r.ip && mtrData[key].ip === '*') mtrData[key].ip = r.ip;
+                mtrData[key].sent++;
+                if (!r.timeout) {
+                    mtrData[key].recv++;
+                    const validTimes = r.times.filter(t => t > 0);
+                    mtrData[key].times.push(...validTimes);
+                }
+            });
+        }
+
+        function renderMtrTable() {
+            const tbody = document.getElementById('mtrTableBody');
+            const hops = Object.keys(mtrData).map(Number).sort((a, b) => a - b);
+            tbody.innerHTML = hops.map(hop => {
+                const d = mtrData[hop];
+                const loss = d.sent > 0 ? Math.round((1 - d.recv / d.sent) * 100) : 0;
+                const lossClass = loss === 0 ? 'good' : loss < 20 ? 'warn' : 'bad';
+                const avg = d.times.length > 0 ? Math.round(d.times.reduce((a, b) => a + b, 0) / d.times.length) : 0;
+                const min = d.times.length > 0 ? Math.min(...d.times) : 0;
+                const max = d.times.length > 0 ? Math.max(...d.times) : 0;
+                return `<tr>
+                    <td>${d.hop}</td>
+                    <td>${d.ip}</td>
+                    <td><span class="mtr-loss ${lossClass}">${loss}%</span><div class="mtr-bar"><div class="mtr-bar-fill" style="width: ${100 - loss}%"></div></div></td>
+                    <td>${d.sent}</td>
+                    <td>${d.recv}</td>
+                    <td>${avg} ms</td>
+                    <td>${min} ms</td>
+                    <td>${max} ms</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function updateMtrStats() {
+            const hops = Object.values(mtrData);
+            const totalHops = hops.length;
+            const totalSent = hops.reduce((sum, d) => sum + d.sent, 0);
+            const totalRecv = hops.reduce((sum, d) => sum + d.recv, 0);
+            const totalLoss = totalSent > 0 ? Math.round((1 - totalRecv / totalSent) * 100) : 0;
+            const allTimes = hops.flatMap(d => d.times);
+            const avgLatency = allTimes.length > 0 ? Math.round(allTimes.reduce((a, b) => a + b, 0) / allTimes.length) : 0;
+            const maxLatency = allTimes.length > 0 ? Math.max(...allTimes) : 0;
+            
+            document.getElementById('mtrTotalHops').textContent = totalHops;
+            document.getElementById('mtrTotalSent').textContent = totalSent;
+            document.getElementById('mtrTotalLoss').textContent = totalLoss + '%';
+            document.getElementById('mtrAvgLatency').textContent = avgLatency;
+            document.getElementById('mtrMaxLatency').textContent = maxLatency;
+        }
+
+        function resetMtrRoutePath() {
+            document.getElementById('mtrHopsBadge').textContent = '0';
+            document.getElementById('mtrRoutePath').innerHTML = `<div class="route-node"><div class="route-node-circle start"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></div><div class="route-node-label">本机</div></div>`;
+        }
+
+        function renderMtrRoutePath(host) {
+            const hops = Object.keys(mtrData).map(Number).sort((a, b) => a - b);
+            document.getElementById('mtrHopsBadge').textContent = hops.length;
+            
+            let html = `<div class="route-node"><div class="route-node-circle start"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg></div><div class="route-node-label">本机</div></div>`;
+            
+            hops.forEach(hop => {
+                const d = mtrData[hop];
+                const loss = d.sent > 0 ? Math.round((1 - d.recv / d.sent) * 100) : 0;
+                const avg = d.times.length > 0 ? Math.round(d.times.reduce((a, b) => a + b, 0) / d.times.length) : 0;
+                const isTimeout = loss === 100;
+                
+                html += `<div class="route-connector${isTimeout ? ' timeout' : ''}"></div>`;
+                html += `<div class="route-node">
+                    <div class="route-node-circle ${isTimeout ? 'timeout' : 'hop'}" title="${d.ip}\n丢包: ${loss}%">${d.hop}</div>
+                    <div class="route-node-label">${d.ip}</div>
+                    ${!isTimeout && avg > 0 ? `<div class="route-node-time">${avg}ms</div>` : ''}
+                </div>`;
+            });
+            
+            // 添加终点
+            html += `<div class="route-connector"></div>`;
+            html += `<div class="route-node"><div class="route-node-circle end"><svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg></div><div class="route-node-label">${host}</div></div>`;
+            
+            document.getElementById('mtrRoutePath').innerHTML = html;
+            const container = document.getElementById('mtrRoutePath').parentElement;
+            container.scrollLeft = container.scrollWidth;
+        }
+
+        // ==================== Trippy 模式 ====================
+        let trippyRunning = false;
+        let trippyHops = [];
+        let trippyRound = 0;
+        let trippyGeoCache = {};
+        let trippyRdnsCache = {};
+
+        function escHtml(s) {
+            if (s == null) return '';
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function fmtMs(v) {
+            if (v == null) return '--';
+            return v < 10 ? v.toFixed(1) : Math.round(v);
+        }
+
+        async function startTrippy() {
+            const host = document.getElementById('trippyHost').value.trim();
+            if (!host) { alert('请输入目标主机'); return; }
+            if (isTracing || mtrRunning) { alert('请先停止其他正在运行的任务'); return; }
+
+            const opts = {
+                host,
+                maxHops: parseInt(document.getElementById('trippyMaxHops').value) || 30,
+                timeout: parseInt(document.getElementById('trippyTimeout').value) || 2000,
+                interval: parseInt(document.getElementById('trippyInterval').value) || 1000,
+                protocol: document.getElementById('trippyProtocol').value,
+                port: parseInt(document.getElementById('trippyPort').value) || 80
+            };
+
+            currentMode = 'trippy';
+            trippyRunning = true;
+            trippyHops = [];
+            trippyRound = 0;
+            trippyGeoCache = {};
+            trippyRdnsCache = {};
+
+            document.getElementById('trippyStartBtn').disabled = true;
+            document.getElementById('trippyStopBtn').disabled = false;
+            document.getElementById('trippyExportBtn').disabled = true;
+            document.getElementById('trippyTableBody').innerHTML = '<tr><td colspan="13" style="text-align:center; color:var(--text-muted); padding:24px;">正在发现路由...</td></tr>';
+            updateTrippyStats();
+
+            try {
+                await ipcRenderer.invoke('traceroute:trippy-start', opts);
+            } catch (e) {
+                console.error('Trippy 启动失败', e);
+                stopTrippyUI();
+            }
+        }
+
+        function stopTrippy() {
+            ipcRenderer.invoke('traceroute:trippy-stop');
+        }
+
+        function stopTrippyUI() {
+            trippyRunning = false;
+            document.getElementById('trippyStartBtn').disabled = false;
+            document.getElementById('trippyStopBtn').disabled = true;
+            document.getElementById('trippyExportBtn').disabled = trippyHops.length === 0;
+        }
+
+        function setTrippyStatus(kind, text) {
+            const el = document.getElementById('trippyStatus');
+            const dot = el.querySelector('.trippy-status-dot');
+            const txt = el.querySelector('.status-text');
+            dot.className = 'trippy-status-dot ' + (kind || '');
+            txt.textContent = text;
+        }
+
+        async function lookupGeoForHop(ip) {
+            if (!ip || trippyGeoCache[ip]) return;
+            try {
+                const data = await ipcRenderer.invoke('traceroute:lookup-geoip', ip);
+                trippyGeoCache[ip] = data || { ip };
+                renderTrippyTable();
+            } catch (e) {}
+        }
+
+        async function lookupRdnsForHop(ip) {
+            if (!ip || (ip in trippyRdnsCache)) return;
+            try {
+                const hostname = await ipcRenderer.invoke('traceroute:reverseDns', ip);
+                trippyRdnsCache[ip] = hostname || null;
+                if (hostname) renderTrippyTable();
+            } catch (e) {}
+        }
+
+        function renderHistogram(history) {
+            if (!history || history.length === 0) return '<span class="histogram-empty">--</span>';
+            const max = Math.max(...history, 1);
+            const bars = history.slice(-30);
+            return '<div class="histogram">' + bars.map(v => {
+                const pct = Math.max(8, (v / max) * 100);
+                let cls = '';
+                if (v < 50) cls = 'fast';
+                else if (v < 150) cls = '';
+                else if (v < 300) cls = 'slow';
+                else cls = 'very-slow';
+                return `<div class="histogram-bar ${cls}" style="height:${pct}%" title="${fmtMs(v)} ms"></div>`;
+            }).join('') + '</div>';
+        }
+
+        function renderAsnCell(ip) {
+            const geo = trippyGeoCache[ip];
+            if (!geo) return '<span style="color:var(--text-muted);">--</span>';
+            if (geo.private) return '<span style="color:var(--text-muted);">私有网络</span>';
+            const cc = geo.countryCode ? `<span class="country">${escHtml(geo.countryCode)}</span>` : '';
+            const asn = geo.asn ? `<span class="asn-num">AS${escHtml(geo.asn)}</span> ` : '';
+            const org = geo.org ? `<span title="${escHtml(geo.org)}">${escHtml((geo.org || '').slice(0, 18))}</span>` : '';
+            return `${cc}${asn}${org}`;
+        }
+
+        function renderTrippyTable() {
+            const tbody = document.getElementById('trippyTableBody');
+            if (trippyHops.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="13" style="text-align:center; color:var(--text-muted); padding:24px;">正在发现路由...</td></tr>';
+                return;
+            }
+            tbody.innerHTML = trippyHops.map(h => {
+                if (!h.ip) {
+                    return `<tr><td class="col-num">${h.hop}</td><td colspan="12" class="timeout-cell">* * *  无响应</td></tr>`;
+                }
+                const loss = h.loss || 0;
+                const lossClass = loss === 0 ? 'good' : loss < 30 ? 'warn' : 'bad';
+                const hostname = trippyRdnsCache[h.ip] || h.hostname || '';
+                return `<tr>
+                    <td class="col-num">${h.hop}</td>
+                    <td class="col-asn">${renderAsnCell(h.ip)}</td>
+                    <td class="col-host" title="${escHtml(hostname)}">${escHtml(hostname || '--')}</td>
+                    <td>${escHtml(h.ip)}</td>
+                    <td class="col-num">${h.sent}</td>
+                    <td class="col-num">${h.recv}</td>
+                    <td class="col-num col-loss ${lossClass}">${loss.toFixed(1)}%</td>
+                    <td class="col-num">${fmtMs(h.last)}</td>
+                    <td class="col-num">${fmtMs(h.avg)}</td>
+                    <td class="col-num">${fmtMs(h.min)}</td>
+                    <td class="col-num">${fmtMs(h.max)}</td>
+                    <td class="col-num">${fmtMs(h.stdev)}</td>
+                    <td>${renderHistogram(h.history)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function updateTrippyStats() {
+            const valid = trippyHops.filter(h => h.ip);
+            document.getElementById('trippyTotalHops').textContent = valid.length;
+            document.getElementById('trippyRound').textContent = trippyRound;
+
+            const totalSent = valid.reduce((s, h) => s + h.sent, 0);
+            const totalRecv = valid.reduce((s, h) => s + h.recv, 0);
+            const avgLoss = totalSent > 0 ? ((totalSent - totalRecv) / totalSent) * 100 : 0;
+            document.getElementById('trippyAvgLoss').textContent = avgLoss.toFixed(1) + '%';
+
+            const avgs = valid.filter(h => h.avg != null).map(h => h.avg);
+            const avg = avgs.length > 0 ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 0;
+            document.getElementById('trippyAvgLatency').textContent = Math.round(avg);
+
+            let worst = null;
+            for (const h of valid) {
+                if (!h.sent) continue;
+                if (!worst || h.loss > worst.loss || (h.loss === worst.loss && (h.avg || 0) > (worst.avg || 0))) {
+                    worst = h;
+                }
+            }
+            document.getElementById('trippyWorstHop').textContent = worst ? `#${worst.hop}` : '--';
+        }
+
+        ipcRenderer.on('traceroute:trippy-state', (_, payload) => {
+            const { state, host, hopCount, message } = payload || {};
+            if (state === 'discovering') {
+                setTrippyStatus('discovering', `正在发现到 ${host} 的路由...`);
+            } else if (state === 'probing') {
+                setTrippyStatus('probing', `已发现 ${hopCount} 跳，正在持续探测 ${host}`);
+            } else if (state === 'stopped') {
+                setTrippyStatus('', '已停止');
+                stopTrippyUI();
+            } else if (state === 'error') {
+                setTrippyStatus('error', '错误：' + (message || ''));
+                stopTrippyUI();
+            }
+        });
+
+        ipcRenderer.on('traceroute:trippy-update', (_, payload) => {
+            if (currentMode !== 'trippy') return;
+            const updates = (payload && payload.updates) || [];
+            trippyHops = updates;
+            trippyRound++;
+
+            const geoOn = document.getElementById('trippyGeoip').checked;
+            const rdnsOn = document.getElementById('trippyRdns').checked;
+            for (const h of updates) {
+                if (!h.ip) continue;
+                if (geoOn && !trippyGeoCache[h.ip]) lookupGeoForHop(h.ip);
+                if (rdnsOn && !(h.ip in trippyRdnsCache)) lookupRdnsForHop(h.ip);
+            }
+
+            renderTrippyTable();
+            updateTrippyStats();
+            document.getElementById('trippyExportBtn').disabled = false;
+        });
+
+        function exportTrippy() {
+            if (trippyHops.length === 0) return;
+            const host = document.getElementById('trippyHost').value.trim();
+            const header = ['#', 'IP', 'Hostname', 'ASN', 'Country', 'Org', 'Sent', 'Recv', 'Loss%', 'Last', 'Avg', 'Min', 'Max', 'Stdev'];
+            const rows = trippyHops.map(h => {
+                const geo = trippyGeoCache[h.ip] || {};
+                const hostname = trippyRdnsCache[h.ip] || h.hostname || '';
+                return [
+                    h.hop, h.ip || '*', hostname,
+                    geo.asn || '', geo.countryCode || '', geo.org || '',
+                    h.sent, h.recv,
+                    h.loss != null ? h.loss.toFixed(2) : '',
+                    h.last != null ? fmtMs(h.last) : '',
+                    h.avg != null ? fmtMs(h.avg) : '',
+                    h.min != null ? fmtMs(h.min) : '',
+                    h.max != null ? fmtMs(h.max) : '',
+                    h.stdev != null ? fmtMs(h.stdev) : ''
+                ];
+            });
+            const csv = [header, ...rows].map(r => r.map(c => {
+                const s = String(c == null ? '' : c);
+                return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+            }).join(',')).join('\r\n');
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `trippy_${host}_${Date.now()}.csv`;
+            a.click();
+        }
+    </script>
+</body>
+</html>

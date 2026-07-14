@@ -1,0 +1,201 @@
+/**
+ * 终端历史记录下拉样式
+ */
+
+/* ==================== 最近连接下拉 ==================== */
+.history-dropdown {
+    position: relative;
+}
+
+.history-trigger {
+    gap: 6px;
+}
+
+.history-trigger .dropdown-arrow {
+    margin-left: 2px;
+    transition: transform var(--transition-fast);
+}
+
+.history-dropdown.open .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.history-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 320px;
+    max-height: 400px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    display: none;
+    overflow: hidden;
+}
+
+.history-dropdown.open .history-menu {
+    display: block;
+}
+
+.history-list {
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: default;
+    transition: background-color var(--transition-fast);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.history-item:last-child {
+    border-bottom: none;
+}
+
+.history-item:hover {
+    background-color: var(--bg-tertiary);
+}
+
+.history-item-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.history-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.history-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.history-item-protocol {
+    padding: 1px 6px;
+    border-radius: 3px;
+    background-color: var(--bg-tertiary);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.history-item-protocol.ssh { color: var(--primary-color); }
+.history-item-protocol.telnet { color: var(--warning-color); }
+.history-item-protocol.console { color: var(--success-color); }
+
+/* 历史记录头部 */
+.history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-tertiary);
+}
+
+.history-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.history-clear-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: default;
+    transition: all var(--transition-fast);
+}
+
+.history-clear-btn:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
+}
+
+/* 删除按钮 */
+.history-item-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    color: var(--text-muted);
+    cursor: default;
+    opacity: 0;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.history-item:hover .history-item-delete {
+    opacity: 1;
+}
+
+.history-item-delete:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--danger-color);
+}
+
+/* 设备类型图标颜色 */
+.history-item-icon.router { color: var(--primary-color); }
+.history-item-icon.switch { color: var(--success-color); }
+.history-item-icon.firewall { color: var(--danger-color); }
+.history-item-icon.server { color: var(--warning-color); }
+
+.history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    gap: 8px;
+}
+
+.history-empty svg {
+    opacity: 0.5;
+}
+
+.history-empty span {
+    font-size: 13px;
+}
+
+/* 亮色主题适配 */
+[data-theme="light"] .history-menu {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}

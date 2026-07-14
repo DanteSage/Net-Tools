@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>FTP 客户端</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #10121e);
+            --text: var(--text-primary, #ffffff);
+            --text-muted: var(--text-muted, #8892b0);
+            --text-sec: var(--text-secondary, #cbd5e1);
+            --border-color: var(--border-color, rgba(255, 255, 255, 0.08));
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.04));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.08));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.12));
+            --result-bg: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #10121e);
+            --zebra-bg: rgba(255, 255, 255, 0.02);
+            --danger: var(--danger-color, #ef4444);
+            --danger-hover: #dc2626;
+            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+            --glass-blur: blur(16px);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --success: #10b981;
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f8fafc);
+            --text: var(--text-primary, #0f172a);
+            --text-muted: var(--text-muted, #64748b);
+            --text-sec: var(--text-secondary, #334155);
+            --border-color: var(--border-color, rgba(0, 0, 0, 0.08));
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, #cbd5e1);
+            --result-bg: var(--bg-secondary, #f1f5f9);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #ffffff);
+            --zebra-bg: var(--bg-secondary, #f8fafc);
+            --danger: var(--danger-color, #dc2626);
+            --danger-hover: #b91c1c;
+            --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --success: #059669;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Drag region header */
+        .window-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            padding: 0 16px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            -webkit-app-region: drag;
+            flex-shrink: 0;
+        }
+
+        .window-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .window-controls-placeholder {
+            width: 138px;
+            flex-shrink: 0;
+        }
+
+        /* Main Workspace Container */
+        .app-content {
+            flex: 1;
+            min-height: 0;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* Top connection panel */
+        .connection-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .input-group {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 10px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .input-group input {
+            width: 100%;
+            height: 36px;
+            padding: 0 12px 0 32px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+
+        .btn {
+            height: 36px;
+            padding: 0 20px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            font-family: inherit;
+            flex-shrink: 0;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #ffffff;
+        }
+
+        .btn-danger:hover {
+            background: var(--danger-hover);
+        }
+
+        /* Log window */
+        .log-panel {
+            flex-shrink: 0;
+            height: 110px;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.8rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-sec);
+        }
+
+        .log-sent {
+            color: var(--primary);
+        }
+
+        .log-recv {
+            color: var(--success);
+        }
+
+        .log-system {
+            color: var(--text-muted);
+        }
+
+        /* Split Explorer view */
+        .explorer-row {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .pane {
+            display: flex;
+            flex-direction: column;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 12px;
+            min-height: 0;
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .pane-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .pane-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .path-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .path-select {
+            height: 30px;
+            padding: 0 6px;
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.8rem;
+            outline: none;
+            cursor: pointer;
+            max-width: 120px;
+        }
+
+        .path-input {
+            flex: 1;
+            height: 30px;
+            padding: 0 8px;
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.8rem;
+            outline: none;
+            min-width: 0;
+        }
+
+        .path-input:focus {
+            border-color: var(--primary);
+        }
+
+        .btn-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            color: var(--text-sec);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .btn-icon:hover {
+            background: var(--border-color);
+            color: var(--text);
+        }
+
+        /* Table files explorer styles */
+        .table-container {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--input-bg);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            text-align: left;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: var(--header-bg);
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1;
+        }
+
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-sec);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 250px;
+        }
+
+        tr:hover {
+            background: var(--zebra-bg);
+        }
+
+        tr.selected {
+            background: rgba(37, 99, 235, 0.15);
+            color: var(--text);
+        }
+
+        .empty-text {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 40px 0;
+            font-style: italic;
+        }
+
+        table.empty-table {
+            height: 100%;
+        }
+        table.empty-table tbody {
+            height: calc(100% - 32px);
+        }
+        table.empty-table tr {
+            height: 100%;
+        }
+        table.empty-table td.empty-text {
+            height: 100%;
+            vertical-align: middle;
+            border-bottom: none !important;
+        }
+
+        /* Actions button at bottom of panel */
+        .pane-actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
+
+        .btn-transfer {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: #ffffff;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s;
+        }
+
+        .btn-transfer:hover:not(:disabled) {
+            transform: scale(1.1);
+            background: var(--primary-hover);
+        }
+
+        .btn-transfer:disabled {
+            background: var(--input-border);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Tasks Panel */
+        .task-panel {
+            height: 160px;
+            flex-shrink: 0;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .task-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-sec);
+            margin-bottom: 8px;
+            flex-shrink: 0;
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Toasts style */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1a1d30;
+            border: 1px solid var(--border-color);
+            padding: 10px 20px;
+            border-radius: 6px;
+            color: #ffffff;
+            font-size: 0.85rem;
+            box-shadow: var(--shadow);
+            transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 9999;
+            pointer-events: none;
+            backdrop-filter: var(--glass-blur);
+        }
+        :root.light-theme .toast {
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.success {
+            border-color: var(--success);
+            background: #064e3b;
+            color: #a7f3d0;
+        }
+        :root.light-theme .toast.success {
+            background: #ecfdf5;
+            color: #065f46;
+            border-color: #10b981;
+        }
+        .toast.error {
+            border-color: var(--danger);
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+        :root.light-theme .toast.error {
+            background: #fef2f2;
+            color: #991b1b;
+            border-color: #ef4444;
+        }
+
+        /* Confirm Modal Styles */
+        .confirm-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 20000;
+            backdrop-filter: blur(2px);
+        }
+        :root.light-theme .confirm-modal {
+            background-color: rgba(15, 23, 42, 0.3);
+        }
+        .confirm-modal.active {
+            display: flex;
+        }
+        .confirm-content {
+            background-color: #1a1d30;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 24px 32px;
+            max-width: 380px;
+            width: 90%;
+            text-align: center;
+            box-shadow: var(--shadow);
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            animation: modalFadeIn 0.2s ease-out;
+        }
+        :root.light-theme .confirm-content {
+            background-color: #ffffff;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        .confirm-icon {
+            color: var(--danger);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .confirm-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+            margin: 0;
+        }
+        .confirm-message {
+            font-size: 0.85rem;
+            color: var(--text-sec);
+            margin: 0;
+            line-height: 1.5;
+        }
+        .confirm-detail {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin: 0;
+            line-height: 1.4;
+            display: none;
+        }
+        .confirm-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .confirm-actions .btn {
+            min-width: 100px;
+            flex: 1;
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            color: var(--text-sec);
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: var(--text);
+        }
+        :root.light-theme .btn-secondary {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+        :root.light-theme .btn-secondary:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        /* Context Menu Styles */
+        .context-menu {
+            position: fixed;
+            display: none;
+            background: rgba(16, 18, 30, 0.9);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 4px 0;
+            min-width: 140px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            z-index: 10000;
+            backdrop-filter: blur(12px);
+        }
+
+        :root.light-theme .context-menu {
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .context-menu-item {
+            padding: 8px 16px;
+            font-size: 0.82rem;
+            color: var(--text-sec);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.15s;
+        }
+
+        .context-menu-item svg {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        .context-menu-item:hover:not(.disabled) {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .context-menu-item.disabled {
+            color: var(--text-muted);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <!-- Frameless Window Titlebar Header -->
+    <div class="window-header">
+        <div class="window-title">FTP客户端</div>
+        <div class="window-controls-placeholder"></div>
+    </div>
+
+    <div class="app-content">
+        <!-- Connection Config Header Row -->
+        <div class="connection-card">
+            <div class="input-group">
+                <span class="input-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11.5-.95C8.08 7.14 9.94 6 12 6c2.62 0 4.88 1.86 5.39 4.43l.3 1.5 1.53.11c1.56.1 2.78 1.41 2.78 2.96 0 1.65-1.35 3-3 3z"/></svg>
+                </span>
+                <input type="text" id="ftp-ip" placeholder="ip地址" value="">
+            </div>
+            <div class="input-group">
+                <span class="input-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                </span>
+                <input type="text" id="ftp-user" placeholder="用户名" value="anonymous">
+            </div>
+            <div class="input-group">
+                <span class="input-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                </span>
+                <input type="password" id="ftp-pass" placeholder="密码" value="">
+            </div>
+            <div class="input-group">
+                <span class="input-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                </span>
+                <input type="number" id="ftp-port" placeholder="端口" value="21">
+            </div>
+            <button id="btn-connect" class="btn btn-primary">连接</button>
+        </div>
+
+        <!-- CLI trace logging area -->
+        <div id="log-panel" class="log-panel"></div>
+
+        <!-- Files Browser split columns -->
+        <div class="explorer-row">
+            <!-- Left panel: Local Explorer -->
+            <div class="pane">
+                <div class="pane-header">
+                    <span class="pane-title">本地站点</span>
+                    <div class="path-bar-container">
+                        <select id="local-drive-select" class="path-select">
+                            <!-- Populated dynamically with letters C:\, D:\ etc. -->
+                        </select>
+                        <input type="text" id="local-path-input" class="path-input">
+                        <button id="btn-local-refresh" class="btn-icon" title="刷新">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="local-table" class="empty-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 50%;">文件名</th>
+                                <th style="width: 25%;">大小(KB)</th>
+                                <th style="width: 25%;">类型</th>
+                            </tr>
+                        </thead>
+                        <tbody id="local-tbody">
+                            <!-- Local files list here -->
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+            <!-- Right panel: Remote Explorer -->
+            <div class="pane">
+                <div class="pane-header">
+                    <span class="pane-title">远程站点</span>
+                    <div class="path-bar-container">
+                        <select id="remote-history-select" class="path-select">
+                            <option value="">请选择</option>
+                        </select>
+                        <input type="text" id="remote-path-input" class="path-input" value="/" readonly>
+                        <button id="btn-remote-refresh" class="btn-icon" title="刷新" disabled>
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table id="remote-table" class="empty-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 50%;">文件名</th>
+                                <th style="width: 25%;">大小(KB)</th>
+                                <th style="width: 25%;">类型</th>
+                            </tr>
+                        </thead>
+                        <tbody id="remote-tbody">
+                            <tr>
+                                <td colspan="3" class="empty-text">暂无数据</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Task Progress Queue panel at bottom -->
+        <div class="task-panel">
+            <span class="task-title">传输任务栏</span>
+            <div class="table-container" style="border: none; background: transparent;">
+                <table id="task-table" class="empty-table">
+                    <thead>
+                        <tr>
+                            <th>文件名</th>
+                            <th>主机</th>
+                            <th>从</th>
+                            <th>到</th>
+                            <th>状态</th>
+                            <th>上传/下载</th>
+                            <th>速率(KB/S)</th>
+                            <th>文件大小(KB)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="task-tbody">
+                        <tr>
+                            <td colspan="8" class="empty-text">暂无数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Toast -->
+    <div id="toast" class="toast">提示信息</div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="confirm-modal">
+        <div class="confirm-content">
+            <div class="confirm-icon">
+                <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            </div>
+            <h2 id="confirm-title" class="confirm-title">确认删除</h2>
+            <p id="confirm-message" class="confirm-message">确定要删除该项吗？</p>
+            <p id="confirm-detail" class="confirm-detail"></p>
+            <div class="confirm-actions">
+                <button id="confirm-cancel" class="btn btn-secondary">取消</button>
+                <button id="confirm-ok" class="btn btn-danger">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="context-menu">
+        <div id="menu-item-transfer" class="context-menu-item">
+            <!-- Injected via JS -->
+        </div>
+        <div id="menu-item-delete" class="context-menu-item">
+            <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            <span>删除</span>
+        </div>
+        <div id="menu-item-refresh" class="context-menu-item">
+            <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            <span>刷新</span>
+        </div>
+    </div>
+
+    <!-- JS Logic -->
+    <script>
+        const fs = require('fs');
+        const path = require('path');
+        const { ipcRenderer } = require('electron');
+
+        // State variables
+        let isConnected = false;
+        let connectionId = null;
+        let currentLocalPath = '';
+        let currentRemotePath = '/';
+
+        let localFiles = [];
+        let remoteFiles = [];
+        let activeTasks = new Map(); // taskUrl -> taskObject
+
+        let selectedLocalItem = null;
+        let selectedRemoteItem = null;
+
+        // Elements
+        const logPanel = document.getElementById('log-panel');
+        const btnConnect = document.getElementById('btn-connect');
+        const localDriveSelect = document.getElementById('local-drive-select');
+        const localPathInput = document.getElementById('local-path-input');
+        const localTbody = document.getElementById('local-tbody');
+        const btnLocalRefresh = document.getElementById('btn-local-refresh');
+
+        const remoteHistorySelect = document.getElementById('remote-history-select');
+        const remotePathInput = document.getElementById('remote-path-input');
+        const remoteTbody = document.getElementById('remote-tbody');
+        const btnRemoteRefresh = document.getElementById('btn-remote-refresh');
+
+        const taskTbody = document.getElementById('task-tbody');
+
+        const ipInput = document.getElementById('ftp-ip');
+        const userInput = document.getElementById('ftp-user');
+        const passInput = document.getElementById('ftp-pass');
+        const portInput = document.getElementById('ftp-port');
+
+        // Toasts helper
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            if (type === 'error') {
+                toast.classList.add('error');
+            } else if (type === 'success') {
+                toast.classList.add('success');
+            }
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Confirm Dialog Helper
+        function showConfirm({ title = '确认', message = '确定要执行此操作吗？', confirmText = '确定', type = 'danger' } = {}) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirm-modal');
+                const titleEl = document.getElementById('confirm-title');
+                const messageEl = document.getElementById('confirm-message');
+                const okBtn = document.getElementById('confirm-ok');
+                const cancelBtn = document.getElementById('confirm-cancel');
+                const icon = modal.querySelector('.confirm-icon');
+
+                titleEl.textContent = title;
+                messageEl.textContent = message;
+                okBtn.textContent = confirmText;
+
+                if (type === 'danger') {
+                    icon.style.color = 'var(--danger)';
+                    okBtn.className = 'btn btn-danger';
+                } else {
+                    icon.style.color = 'var(--primary)';
+                    okBtn.className = 'btn btn-primary';
+                }
+
+                modal.classList.add('active');
+
+                const cleanup = () => {
+                    modal.classList.remove('active');
+                    okBtn.removeEventListener('click', handleOk);
+                    cancelBtn.removeEventListener('click', handleCancel);
+                };
+
+                const handleOk = () => {
+                    cleanup();
+                    resolve(true);
+                };
+
+                const handleCancel = () => {
+                    cleanup();
+                    resolve(false);
+                };
+
+                okBtn.addEventListener('click', handleOk);
+                cancelBtn.addEventListener('click', handleCancel);
+            });
+        }
+
+        // Logging helper
+        function appendLog(direction, text) {
+            const span = document.createElement('div');
+            const now = new Date().toLocaleTimeString();
+            let directionPrefix = '';
+            if (direction === 'sent') {
+                span.className = 'log-sent';
+                directionPrefix = '> ';
+            } else if (direction === 'recv') {
+                span.className = 'log-recv';
+                directionPrefix = '< ';
+            } else {
+                span.className = 'log-system';
+                directionPrefix = '* ';
+            }
+            span.textContent = `[${now}] ${directionPrefix}${text}`;
+            logPanel.appendChild(span);
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        // Init Local Paths
+        function initLocalSite() {
+            // Detect Windows drives
+            const drives = [];
+            const letters = ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'];
+            for (const L of letters) {
+                const root = L + ':\\';
+                try {
+                    if (fs.existsSync(root)) {
+                        drives.push(root);
+                    }
+                } catch(e) {}
+            }
+
+            localDriveSelect.innerHTML = '';
+            drives.forEach(drive => {
+                const opt = document.createElement('option');
+                opt.value = drive;
+                opt.textContent = drive;
+                localDriveSelect.appendChild(opt);
+            });
+
+            // Set current directory to home dir or first drive
+            const homeDir = require('os').homedir();
+            if (fs.existsSync(homeDir)) {
+                currentLocalPath = homeDir;
+            } else if (drives.length > 0) {
+                currentLocalPath = drives[0];
+            } else {
+                currentLocalPath = 'C:\\';
+            }
+
+            localPathInput.value = currentLocalPath;
+            syncDriveDropdown();
+            loadLocalDirectory();
+        }
+
+        function syncDriveDropdown() {
+            const currentDrive = currentLocalPath.substring(0, 3).toUpperCase();
+            for (let i = 0; i < localDriveSelect.options.length; i++) {
+                if (localDriveSelect.options[i].value.toUpperCase() === currentDrive) {
+                    localDriveSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        // Load Local Files
+        function loadLocalDirectory() {
+            try {
+                if (!fs.existsSync(currentLocalPath)) {
+                    showToast('本地路径不存在: ' + currentLocalPath, 'error');
+                    return;
+                }
+
+                const names = fs.readdirSync(currentLocalPath);
+                localFiles = [];
+
+                // Parent dir logic
+                const isDriveRoot = /^[A-Z]:\\$/i.test(currentLocalPath);
+                if (!isDriveRoot) {
+                    localFiles.push({
+                        name: '..',
+                        isDirectory: true,
+                        size: 0,
+                        isParentLink: true
+                    });
+                }
+
+                names.forEach(name => {
+                    const full = path.join(currentLocalPath, name);
+                    try {
+                        const stat = fs.statSync(full);
+                        localFiles.push({
+                            name,
+                            isDirectory: stat.isDirectory(),
+                            size: stat.size
+                        });
+                    } catch (e) {
+                        // Skip system files or permissions error
+                    }
+                });
+
+                // Sort: directories first, then files alphabetically
+                localFiles.sort((a, b) => {
+                    if (a.isParentLink) return -1;
+                    if (b.isParentLink) return 1;
+                    if (a.isDirectory && !b.isDirectory) return -1;
+                    if (!a.isDirectory && a.isDirectory) return 1;
+                    return a.name.localeCompare(b.name);
+                });
+
+                renderLocalTable();
+            } catch (err) {
+                showToast('读取本地目录失败: ' + err.message, 'error');
+            }
+        }
+
+        function renderLocalTable() {
+            localTbody.innerHTML = '';
+            selectedLocalItem = null;
+
+            if (localFiles.length === 0) {
+                document.getElementById('local-table').classList.add('empty-table');
+                localTbody.innerHTML = `<tr><td colspan="3" class="empty-text">目录为空</td></tr>`;
+                return;
+            } else {
+                document.getElementById('local-table').classList.remove('empty-table');
+            }
+
+            localFiles.forEach(file => {
+                const tr = document.createElement('tr');
+                tr.dataset.name = file.name;
+                tr.dataset.isdir = file.isDirectory;
+
+                // Folder Yellow Icon / File Gray Icon
+                const iconSvg = file.isDirectory ? 
+                    `<svg viewBox="0 0 24 24" width="16" height="16" style="fill: #eab308; vertical-align: middle; margin-right: 6px;"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>` : 
+                    `<svg viewBox="0 0 24 24" width="16" height="16" style="fill: #94a3b8; vertical-align: middle; margin-right: 6px;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
+
+                const nameTd = document.createElement('td');
+                nameTd.innerHTML = `${iconSvg}${file.name}`;
+                tr.appendChild(nameTd);
+
+                const sizeTd = document.createElement('td');
+                sizeTd.textContent = file.isDirectory ? '-' : (file.size / 1024).toFixed(1);
+                tr.appendChild(sizeTd);
+
+                const typeTd = document.createElement('td');
+                typeTd.textContent = file.isDirectory ? '文件夹' : '文件';
+                tr.appendChild(typeTd);
+
+                // Event Listeners
+                tr.addEventListener('click', () => {
+                    document.querySelectorAll('#local-tbody tr').forEach(r => r.classList.remove('selected'));
+                    tr.classList.add('selected');
+                    selectedLocalItem = file;
+                });
+
+                tr.addEventListener('dblclick', () => {
+                    if (file.isDirectory) {
+                        if (file.isParentLink) {
+                            currentLocalPath = path.dirname(currentLocalPath);
+                        } else {
+                            currentLocalPath = path.join(currentLocalPath, file.name);
+                        }
+                        localPathInput.value = currentLocalPath;
+                        syncDriveDropdown();
+                        loadLocalDirectory();
+                    }
+                });
+
+                localTbody.appendChild(tr);
+            });
+        }
+
+        // Remote Site Directory Loading
+        async function loadRemoteDirectory() {
+            if (!isConnected) return;
+            appendLog('system', `正在列出远程目录: ${currentRemotePath}`);
+            
+            try {
+                const res = await ipcRenderer.invoke('ftp:list', { connectionId, path: currentRemotePath });
+                if (res.success) {
+                    remoteFiles = [];
+                    // Prepend parent link if not root
+                    if (currentRemotePath !== '/' && currentRemotePath !== '') {
+                        remoteFiles.push({
+                            name: '..',
+                            isDirectory: true,
+                            size: 0,
+                            isParentLink: true
+                        });
+                    }
+
+                    res.files.forEach(f => {
+                        remoteFiles.push({
+                            name: f.name,
+                            isDirectory: f.isDirectory,
+                            size: f.size
+                        });
+                    });
+
+                    // Sort: directories first, then files alphabetically
+                    remoteFiles.sort((a, b) => {
+                        if (a.isParentLink) return -1;
+                        if (b.isParentLink) return 1;
+                        if (a.isDirectory && !b.isDirectory) return -1;
+                        if (!a.isDirectory && b.isDirectory) return 1;
+                        return a.name.localeCompare(b.name);
+                    });
+
+                    renderRemoteTable();
+                    remotePathInput.value = currentRemotePath;
+                    updateRemoteHistorySelect();
+                } else {
+                    showToast('读取远程目录失败: ' + res.error, 'error');
+                    appendLog('system', `列出目录失败: ${res.error}`);
+                }
+            } catch (err) {
+                showToast('读取远程目录出错: ' + err.message, 'error');
+            }
+        }
+
+        function renderRemoteTable() {
+            remoteTbody.innerHTML = '';
+            selectedRemoteItem = null;
+
+            if (remoteFiles.length === 0) {
+                document.getElementById('remote-table').classList.add('empty-table');
+                remoteTbody.innerHTML = `<tr><td colspan="3" class="empty-text">目录为空</td></tr>`;
+                return;
+            } else {
+                document.getElementById('remote-table').classList.remove('empty-table');
+            }
+
+            remoteFiles.forEach(file => {
+                const tr = document.createElement('tr');
+                tr.dataset.name = file.name;
+                tr.dataset.isdir = file.isDirectory;
+
+                const iconSvg = file.isDirectory ? 
+                    `<svg viewBox="0 0 24 24" width="16" height="16" style="fill: #eab308; vertical-align: middle; margin-right: 6px;"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>` : 
+                    `<svg viewBox="0 0 24 24" width="16" height="16" style="fill: #94a3b8; vertical-align: middle; margin-right: 6px;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
+
+                const nameTd = document.createElement('td');
+                nameTd.innerHTML = `${iconSvg}${file.name}`;
+                tr.appendChild(nameTd);
+
+                const sizeTd = document.createElement('td');
+                sizeTd.textContent = file.isDirectory ? '-' : (file.size / 1024).toFixed(1);
+                tr.appendChild(sizeTd);
+
+                const typeTd = document.createElement('td');
+                typeTd.textContent = file.isDirectory ? '文件夹' : '文件';
+                tr.appendChild(typeTd);
+
+                // Event Listeners
+                tr.addEventListener('click', () => {
+                    document.querySelectorAll('#remote-tbody tr').forEach(r => r.classList.remove('selected'));
+                    tr.classList.add('selected');
+                    selectedRemoteItem = file;
+                });
+
+                tr.addEventListener('dblclick', () => {
+                    if (file.isDirectory) {
+                        if (file.isParentLink) {
+                            currentRemotePath = getRemoteParentPath(currentRemotePath);
+                        } else {
+                            currentRemotePath = currentRemotePath + (currentRemotePath.endsWith('/') ? '' : '/') + file.name;
+                        }
+                        loadRemoteDirectory();
+                    }
+                });
+
+                remoteTbody.appendChild(tr);
+            });
+        }
+
+        function getRemoteParentPath(p) {
+            if (p === '/' || !p) return '/';
+            const idx = p.lastIndexOf('/');
+            if (idx <= 0) return '/';
+            return p.substring(0, idx);
+        }
+
+        function updateRemoteHistorySelect() {
+            // Add current remote path to select dropdown options if not already exists
+            let exists = false;
+            for (let i = 0; i < remoteHistorySelect.options.length; i++) {
+                if (remoteHistorySelect.options[i].value === currentRemotePath) {
+                    exists = true;
+                    remoteHistorySelect.selectedIndex = i;
+                    break;
+                }
+            }
+            if (!exists) {
+                const opt = document.createElement('option');
+                opt.value = currentRemotePath;
+                opt.textContent = currentRemotePath;
+                remoteHistorySelect.appendChild(opt);
+                remoteHistorySelect.value = currentRemotePath;
+            }
+        }
+
+        // Connection Handlers
+        async function handleConnect() {
+            if (isConnected) {
+                // Disconnect
+                btnConnect.disabled = true;
+                btnConnect.textContent = '断开中...';
+                appendLog('system', '正在断开连接...');
+                try {
+                    await ipcRenderer.invoke('ftp:disconnect', connectionId);
+                    appendLog('system', 'FTP 连接已成功断开');
+                } catch(e) {}
+
+                isConnected = false;
+                connectionId = null;
+                btnConnect.className = 'btn btn-primary';
+                btnConnect.textContent = '连接';
+                btnConnect.disabled = false;
+                btnRemoteRefresh.disabled = true;
+
+                document.getElementById('remote-table').classList.add('empty-table');
+                remoteTbody.innerHTML = '<tr><td colspan="3" class="empty-text">暂无数据</td></tr>';
+                remoteHistorySelect.innerHTML = '<option value="">请选择</option>';
+                remotePathInput.value = '/';
+                return;
+            }
+
+            const host = ipInput.value.trim();
+            const username = userInput.value.trim();
+            const password = passInput.value;
+            const port = parseInt(portInput.value.trim());
+
+            if (!host) {
+                showToast('IP地址不能为空', 'error');
+                return;
+            }
+
+            btnConnect.disabled = true;
+            btnConnect.textContent = '连接中...';
+            logPanel.innerHTML = '';
+            appendLog('system', `正在连接到 FTP 服务器 ${host}:${port || 21}...`);
+
+            try {
+                const res = await ipcRenderer.invoke('ftp:connect', { host, username, password, port });
+                if (res.success) {
+                    isConnected = true;
+                    connectionId = res.connectionId;
+                    btnConnect.className = 'btn btn-danger';
+                    btnConnect.textContent = '断开';
+                    btnConnect.disabled = false;
+                    btnRemoteRefresh.disabled = false;
+                    appendLog('system', 'FTP 服务器连接登录成功！');
+
+                    // Set up CLI command logging listener
+                    ipcRenderer.on(`ftp:log:${connectionId}`, (event, logData) => {
+                        appendLog(logData.direction, logData.text);
+                    });
+
+                    // Set up Transfer progress listeners
+                    ipcRenderer.on('ftp:progress', (event, data) => {
+                        if (data.connectionId !== connectionId) return;
+                        updateTaskProgress(data);
+                    });
+
+                    currentRemotePath = '/';
+                    loadRemoteDirectory();
+                } else {
+                    isConnected = false;
+                    btnConnect.disabled = false;
+                    btnConnect.textContent = '连接';
+                    appendLog('system', `连接失败: ${res.error}`);
+                    showToast('连接失败: ' + res.error, 'error');
+                }
+            } catch (err) {
+                isConnected = false;
+                btnConnect.disabled = false;
+                btnConnect.textContent = '连接';
+                appendLog('system', `连接异常: ${err.message}`);
+                showToast('连接出错: ' + err.message, 'error');
+            }
+        }
+
+        // Upload Logic
+        async function handleUpload() {
+            if (!isConnected || !selectedLocalItem) return;
+            const localFile = selectedLocalItem;
+            const localFilePath = path.join(currentLocalPath, localFile.name);
+            const remoteFilePath = currentRemotePath + (currentRemotePath.endsWith('/') ? '' : '/') + localFile.name;
+
+            appendLog('system', `开始上传文件: ${localFile.name} -> ${remoteFilePath}`);
+            showToast('开始上传: ' + localFile.name);
+
+            const taskKey = `${connectionId}_upload_${localFilePath}_${remoteFilePath}`;
+            const host = ipInput.value.trim();
+
+            const task = {
+                key: taskKey,
+                filename: localFile.name,
+                host: host,
+                from: localFilePath,
+                to: remoteFilePath,
+                direction: '上传',
+                status: '0.0%',
+                speed: '计算中...',
+                size: (localFile.size / 1024).toFixed(1),
+                transferred: 0,
+                lastTransferred: 0,
+                lastTime: Date.now()
+            };
+
+            activeTasks.set(taskKey, task);
+            renderTaskTable();
+
+            try {
+                const res = await ipcRenderer.invoke('ftp:upload', { connectionId, localPath: localFilePath, remotePath: remoteFilePath });
+                const updatedTask = activeTasks.get(taskKey);
+                if (res.success) {
+                    updatedTask.status = '已完成';
+                    updatedTask.speed = '0';
+                    showToast('上传完成: ' + localFile.name, 'success');
+                    appendLog('system', `文件上传成功: ${localFile.name}`);
+                    loadRemoteDirectory();
+                } else {
+                    updatedTask.status = '失败';
+                    updatedTask.speed = '-';
+                    showToast('上传失败: ' + res.error, 'error');
+                    appendLog('system', `文件上传失败: ${localFile.name} - ${res.error}`);
+                }
+            } catch (err) {
+                const updatedTask = activeTasks.get(taskKey);
+                if (updatedTask) {
+                    updatedTask.status = '出错';
+                    updatedTask.speed = '-';
+                }
+                showToast('上传异常: ' + err.message, 'error');
+            }
+            renderTaskTable();
+        }
+
+        // Download Logic
+        async function handleDownload() {
+            if (!isConnected || !selectedRemoteItem) return;
+            const remoteFile = selectedRemoteItem;
+            const remoteFilePath = currentRemotePath + (currentRemotePath.endsWith('/') ? '' : '/') + remoteFile.name;
+            const localFilePath = path.join(currentLocalPath, remoteFile.name);
+
+            appendLog('system', `开始下载文件: ${remoteFilePath} -> ${localFilePath}`);
+            showToast('开始下载: ' + remoteFile.name);
+
+            const taskKey = `${connectionId}_download_${remoteFilePath}_${localFilePath}`;
+            const host = ipInput.value.trim();
+
+            const task = {
+                key: taskKey,
+                filename: remoteFile.name,
+                host: host,
+                from: remoteFilePath,
+                to: localFilePath,
+                direction: '下载',
+                status: '0.0%',
+                speed: '计算中...',
+                size: (remoteFile.size / 1024).toFixed(1),
+                transferred: 0,
+                lastTransferred: 0,
+                lastTime: Date.now()
+            };
+
+            activeTasks.set(taskKey, task);
+            renderTaskTable();
+
+            try {
+                const res = await ipcRenderer.invoke('ftp:download', { connectionId, remotePath: remoteFilePath, localPath: localFilePath });
+                const updatedTask = activeTasks.get(taskKey);
+                if (res.success) {
+                    updatedTask.status = '已完成';
+                    updatedTask.speed = '0';
+                    showToast('下载完成: ' + remoteFile.name, 'success');
+                    appendLog('system', `文件下载成功: ${remoteFile.name}`);
+                    loadLocalDirectory();
+                } else {
+                    updatedTask.status = '失败';
+                    updatedTask.speed = '-';
+                    showToast('下载失败: ' + res.error, 'error');
+                    appendLog('system', `文件下载失败: ${remoteFile.name} - ${res.error}`);
+                }
+            } catch (err) {
+                const updatedTask = activeTasks.get(taskKey);
+                if (updatedTask) {
+                    updatedTask.status = '出错';
+                    updatedTask.speed = '-';
+                }
+                showToast('下载异常: ' + err.message, 'error');
+            }
+            renderTaskTable();
+        }
+
+        // Task Progress Updater
+        function updateTaskProgress(data) {
+            const taskKey = `${data.connectionId}_${data.direction}_${data.localPath}_${data.remotePath}`;
+            const task = activeTasks.get(taskKey);
+            if (!task) return;
+
+            const now = Date.now();
+            const elapsed = (now - task.lastTime) / 1000; // in seconds
+
+            if (elapsed >= 0.5 || data.transferred === data.total) {
+                const bytesDiff = data.transferred - task.lastTransferred;
+                const speedKb = (bytesDiff / 1024) / (elapsed || 0.1);
+
+                task.speed = speedKb.toFixed(1);
+                task.lastTransferred = data.transferred;
+                task.lastTime = now;
+            }
+
+            const pct = ((data.transferred / (data.total || 1)) * 100).toFixed(1);
+            task.status = `${pct}%`;
+            task.transferred = data.transferred;
+
+            renderTaskTable();
+        }
+
+        function renderTaskTable() {
+            taskTbody.innerHTML = '';
+            if (activeTasks.size === 0) {
+                document.getElementById('task-table').classList.add('empty-table');
+                taskTbody.innerHTML = `<tr><td colspan="8" class="empty-text">暂无数据</td></tr>`;
+                return;
+            } else {
+                document.getElementById('task-table').classList.remove('empty-table');
+            }
+
+            // Display newest first
+            const list = Array.from(activeTasks.values()).reverse();
+            list.forEach(task => {
+                const tr = document.createElement('tr');
+                
+                const fnTd = document.createElement('td');
+                fnTd.textContent = task.filename;
+                tr.appendChild(fnTd);
+
+                const hostTd = document.createElement('td');
+                hostTd.textContent = task.host;
+                tr.appendChild(hostTd);
+
+                const fromTd = document.createElement('td');
+                fromTd.textContent = task.from;
+                fromTd.title = task.from;
+                tr.appendChild(fromTd);
+
+                const toTd = document.createElement('td');
+                toTd.textContent = task.to;
+                toTd.title = task.to;
+                tr.appendChild(toTd);
+
+                const statusTd = document.createElement('td');
+                statusTd.textContent = task.status;
+                // Highlight finished/error status
+                if (task.status === '已完成') {
+                    statusTd.style.color = 'var(--success)';
+                } else if (task.status === '失败' || task.status === '出错') {
+                    statusTd.style.color = 'var(--danger)';
+                }
+                tr.appendChild(statusTd);
+
+                const dirTd = document.createElement('td');
+                dirTd.textContent = task.direction;
+                tr.appendChild(dirTd);
+
+                const speedTd = document.createElement('td');
+                speedTd.textContent = task.speed;
+                tr.appendChild(speedTd);
+
+                const sizeTd = document.createElement('td');
+                sizeTd.textContent = task.size;
+                tr.appendChild(sizeTd);
+
+                taskTbody.appendChild(tr);
+            });
+        }
+
+        // Event Bindings
+        btnConnect.addEventListener('click', handleConnect);
+
+        localDriveSelect.addEventListener('change', () => {
+            currentLocalPath = localDriveSelect.value;
+            localPathInput.value = currentLocalPath;
+            loadLocalDirectory();
+        });
+
+        localPathInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const val = localPathInput.value.trim();
+                if (val && fs.existsSync(val)) {
+                    currentLocalPath = val;
+                    syncDriveDropdown();
+                    loadLocalDirectory();
+                } else {
+                    showToast('路径不存在: ' + val, 'error');
+                }
+            }
+        });
+
+        btnLocalRefresh.addEventListener('click', loadLocalDirectory);
+
+        remoteHistorySelect.addEventListener('change', () => {
+            const val = remoteHistorySelect.value;
+            if (val) {
+                currentRemotePath = val;
+                loadRemoteDirectory();
+            }
+        });
+
+        btnRemoteRefresh.addEventListener('click', loadRemoteDirectory);
+
+        // IPC Theme changed sync
+        function applyTheme(theme) {
+            if (!theme) return;
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+        
+        // Initial load sync
+        const _qs = new URLSearchParams(location.search);
+        const _qsMode = _qs.get('mode');
+        const _qsTheme = _qs.get('theme');
+        if (_qsMode || _qsTheme) {
+            applyTheme({ mode: _qsMode, key: _qsTheme });
+        } else {
+            ipcRenderer.invoke('theme:get').then(theme => {
+                applyTheme(theme);
+            }).catch(() => {});
+        }
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+
+        // Setup Context Menu and logic
+        let menuContext = null;
+        let contextTargetItem = null;
+
+        function setupContextMenu() {
+            const localTable = document.getElementById('local-table');
+            const remoteTable = document.getElementById('remote-table');
+            const menu = document.getElementById('context-menu');
+            const menuItemTransfer = document.getElementById('menu-item-transfer');
+            const menuItemDelete = document.getElementById('menu-item-delete');
+            const menuItemRefresh = document.getElementById('menu-item-refresh');
+
+            function showMenu(e, context, item) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                menuContext = context;
+                contextTargetItem = item;
+
+                // Setup menu options
+                if (item) {
+                    menuItemTransfer.style.display = 'flex';
+                    menuItemDelete.style.display = 'flex';
+
+                    if (context === 'local') {
+                        menuItemTransfer.innerHTML = `<svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg><span>上传</span>`;
+                        
+                        if (!isConnected || item.isDirectory || item.isParentLink) {
+                            menuItemTransfer.classList.add('disabled');
+                        } else {
+                            menuItemTransfer.classList.remove('disabled');
+                        }
+
+                        if (item.isParentLink) {
+                            menuItemDelete.classList.add('disabled');
+                        } else {
+                            menuItemDelete.classList.remove('disabled');
+                        }
+                    } else {
+                        menuItemTransfer.innerHTML = `<svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg><span>下载</span>`;
+                        
+                        if (item.isDirectory || item.isParentLink) {
+                            menuItemTransfer.classList.add('disabled');
+                        } else {
+                            menuItemTransfer.classList.remove('disabled');
+                        }
+
+                        if (item.isParentLink) {
+                            menuItemDelete.classList.add('disabled');
+                        } else {
+                            menuItemDelete.classList.remove('disabled');
+                        }
+                    }
+                } else {
+                    menuItemTransfer.style.display = 'none';
+                    menuItemDelete.style.display = 'none';
+                }
+
+                menu.style.display = 'block';
+                const menuWidth = menu.offsetWidth;
+                const menuHeight = menu.offsetHeight;
+                const windowWidth = window.innerWidth;
+                const windowHeight = window.innerHeight;
+
+                let left = e.clientX;
+                let top = e.clientY;
+
+                if (left + menuWidth > windowWidth) {
+                    left = windowWidth - menuWidth - 4;
+                }
+                if (top + menuHeight > windowHeight) {
+                    top = windowHeight - menuHeight - 4;
+                }
+                menu.style.left = left + 'px';
+                menu.style.top = top + 'px';
+            }
+
+            localTable.addEventListener('contextmenu', (e) => {
+                const tr = e.target.closest('tr');
+                if (tr && tr.dataset.name) {
+                    const name = tr.dataset.name;
+                    const file = localFiles.find(f => f.name === name);
+                    if (file) {
+                        document.querySelectorAll('#local-tbody tr').forEach(r => r.classList.remove('selected'));
+                        tr.classList.add('selected');
+                        selectedLocalItem = file;
+                        showMenu(e, 'local', file);
+                        return;
+                    }
+                }
+                showMenu(e, 'local', null);
+            });
+
+            remoteTable.addEventListener('contextmenu', (e) => {
+                if (!isConnected) return;
+                const tr = e.target.closest('tr');
+                if (tr && tr.dataset.name) {
+                    const name = tr.dataset.name;
+                    const file = remoteFiles.find(f => f.name === name);
+                    if (file) {
+                        document.querySelectorAll('#remote-tbody tr').forEach(r => r.classList.remove('selected'));
+                        tr.classList.add('selected');
+                        selectedRemoteItem = file;
+                        showMenu(e, 'remote', file);
+                        return;
+                    }
+                }
+                showMenu(e, 'remote', null);
+            });
+
+            document.addEventListener('click', () => {
+                menu.style.display = 'none';
+            });
+
+            menuItemTransfer.addEventListener('click', (e) => {
+                if (menuItemTransfer.classList.contains('disabled')) return;
+                if (menuContext === 'local') {
+                    handleUpload();
+                } else if (menuContext === 'remote') {
+                    handleDownload();
+                }
+            });
+
+            menuItemDelete.addEventListener('click', async (e) => {
+                if (menuItemDelete.classList.contains('disabled')) return;
+                if (!contextTargetItem) return;
+
+                const name = contextTargetItem.name;
+                const isDir = contextTargetItem.isDirectory;
+
+                const confirmed = await showConfirm({
+                    title: '确认删除',
+                    message: `确定要删除 "${name}" 吗？`,
+                    confirmText: '删除',
+                    type: 'danger'
+                });
+                if (!confirmed) return;
+
+                if (menuContext === 'local') {
+                    const fullPath = path.join(currentLocalPath, name);
+                    try {
+                        if (isDir) {
+                            fs.rmSync(fullPath, { recursive: true, force: true });
+                        } else {
+                            fs.unlinkSync(fullPath);
+                        }
+                        showToast(`删除成功: ${name}`, 'success');
+                        appendLog('system', `本地删除成功: ${fullPath}`);
+                        loadLocalDirectory();
+                    } catch (err) {
+                        showToast(`删除失败: ${err.message}`, 'error');
+                        appendLog('system', `本地删除失败: ${fullPath} - ${err.message}`);
+                    }
+                } else if (menuContext === 'remote') {
+                    const fullPath = currentRemotePath + (currentRemotePath.endsWith('/') ? '' : '/') + name;
+                    appendLog('system', `正在请求删除远程项: ${fullPath}`);
+                    try {
+                        let res;
+                        if (isDir) {
+                            res = await ipcRenderer.invoke('ftp:rmdir', { connectionId, path: fullPath });
+                        } else {
+                            res = await ipcRenderer.invoke('ftp:delete', { connectionId, path: fullPath });
+                        }
+
+                        if (res.success) {
+                            showToast(`删除成功: ${name}`, 'success');
+                            appendLog('system', `远程删除成功: ${fullPath}`);
+                            loadRemoteDirectory();
+                        } else {
+                            showToast(`删除失败: ${res.error}`, 'error');
+                            appendLog('system', `远程删除失败: ${fullPath} - ${res.error}`);
+                        }
+                    } catch (err) {
+                        showToast(`删除出错: ${err.message}`, 'error');
+                    }
+                }
+            });
+
+            menuItemRefresh.addEventListener('click', (e) => {
+                if (menuContext === 'local') {
+                    loadLocalDirectory();
+                } else if (menuContext === 'remote') {
+                    loadRemoteDirectory();
+                }
+            });
+        }
+
+        // App Start
+        document.addEventListener('DOMContentLoaded', () => {
+            initLocalSite();
+            setupContextMenu();
+        });
+    </script>
+</body>
+</html>

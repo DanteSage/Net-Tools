@@ -1,0 +1,321 @@
+/**
+ * 运行日志页面样式
+ */
+
+/* ==================== 页面布局 ==================== */
+
+.logs-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+}
+
+/* ==================== 顶部工具栏 ==================== */
+
+.logs-header-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.logs-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+}
+
+/* ==================== 状态指示器 ==================== */
+
+.logs-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+}
+
+.logs-status-indicator .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.logs-status-indicator .status-dot.recording {
+    background: #22c55e;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.logs-status-indicator .status-dot.paused {
+    background: #f59e0b;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.9); }
+}
+
+.logs-status-indicator .status-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ==================== 统计徽章 ==================== */
+
+.logs-stats-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stats-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    opacity: 0.6;
+}
+
+.stats-badge:hover { opacity: 0.8; }
+.stats-badge input[type="checkbox"] { display: none; }
+.stats-badge input:checked ~ svg, .stats-badge input:checked ~ .badge-count { opacity: 1; }
+.stats-badge input:checked + svg + .badge-count, .stats-badge:has(input:checked) { opacity: 1; }
+
+.stats-badge.info { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+.stats-badge.warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+.stats-badge.error { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+.stats-badge.success { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+
+.badge-count {
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* ==================== 搜索框 ==================== */
+
+.logs-header-bar .logs-search-box {
+    flex: 0 0 auto;
+    width: 180px;
+}
+
+.logs-header-bar .logs-search-box:focus-within {
+    border-color: var(--primary-color);
+}
+
+/* ==================== 日志列表头部 ==================== */
+
+.logs-list-header {
+    display: grid;
+    grid-template-columns: 80px 60px 150px 1fr;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.header-col {
+    display: flex;
+    align-items: center;
+}
+
+/* ==================== 日志容器 ==================== */
+
+.runtime-logs-container {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    position: relative;
+}
+
+.runtime-logs-list {
+    flex: 1;
+    padding: 12px;
+    overflow-y: auto;
+}
+
+/* ==================== 运行日志项 ==================== */
+
+.runtime-log-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+    background: var(--bg-secondary);
+    border-left: 3px solid transparent;
+    transition: all 0.15s ease;
+}
+
+.runtime-log-item:hover { background: var(--bg-tertiary); }
+.runtime-log-item.info { border-left-color: #3b82f6; }
+.runtime-log-item.warning { border-left-color: #f59e0b; }
+.runtime-log-item.error { border-left-color: #ef4444; }
+.runtime-log-item.success { border-left-color: #22c55e; }
+
+.runtime-log-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.runtime-log-item.info .runtime-log-icon { color: #3b82f6; }
+.runtime-log-item.warning .runtime-log-icon { color: #f59e0b; }
+.runtime-log-item.error .runtime-log-icon { color: #ef4444; }
+.runtime-log-item.success .runtime-log-icon { color: #22c55e; }
+
+.runtime-log-content { flex: 1; min-width: 0; }
+.runtime-log-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.runtime-log-title { font-weight: 500; color: var(--text-primary); }
+.runtime-log-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+.runtime-log-message { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.runtime-log-details { margin-top: 8px; padding: 8px 10px; background: var(--bg-card); border-radius: var(--radius-sm); font-family: 'Consolas', 'Monaco', monospace; font-size: 11px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
+
+/* ==================== 滚动按钮 ==================== */
+
+.logs-scroll-btn {
+    position: absolute;
+    bottom: 16px;
+    right: 24px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+}
+
+.logs-scroll-btn.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.logs-scroll-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== 表格式日志项 ==================== */
+
+.runtime-log-item.table-row {
+    display: grid;
+    grid-template-columns: 80px 60px 150px 1fr;
+    gap: 12px;
+    padding: 10px 16px;
+    margin-bottom: 0;
+    border-radius: 0;
+    border-left: none;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.runtime-log-item.table-row:last-child { border-bottom: none; }
+.runtime-log-item.table-row .log-col { display: flex; align-items: center; overflow: hidden; }
+.runtime-log-item.table-row .log-col-time { font-size: 11px; color: var(--text-muted); font-family: 'Consolas', 'Monaco', monospace; }
+.runtime-log-item.table-row .log-col-level { display: flex; align-items: center; gap: 4px; }
+.runtime-log-item.table-row .log-col-level svg { width: 14px; height: 14px; }
+.runtime-log-item.table-row .log-col-title { font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.runtime-log-item.table-row .log-col-message { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ==================== 日志空状态 ==================== */
+
+.logs-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.logs-empty svg { opacity: 0.2; margin-bottom: 16px; }
+.logs-empty p { font-size: 13px; margin: 0; }
+
+.log-details-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ==================== 亮色主题适配 ==================== */
+
+[data-theme="light"] .logs-header-bar {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .logs-status-indicator {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .runtime-logs-container {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .logs-list-header {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .runtime-log-item {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .runtime-log-item:hover {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .runtime-log-details {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+}
+
+[data-theme="light"] .stats-badge.info {
+    background: rgba(59, 130, 246, 0.08);
+}
+
+[data-theme="light"] .stats-badge.warning {
+    background: rgba(245, 158, 11, 0.08);
+}
+
+[data-theme="light"] .stats-badge.error {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+[data-theme="light"] .stats-badge.success {
+    background: rgba(34, 197, 94, 0.08);
+}

@@ -1,0 +1,329 @@
+/**
+ * 网络工具样式 - 工具卡片、测速等
+ */
+
+/* ==================== 网络工具页面 ==================== */
+.nettools-page {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.tool-section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.tool-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tool-section-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    position: relative;
+    padding-left: 10px;
+}
+
+.tool-section-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--primary-color);
+}
+
+.tool-section-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.nettools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+/* 工具卡片 */
+.tool-card {
+    position: relative;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.tool-card:hover {
+    border-color: rgba(var(--primary-rgb), 0.4);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    transform: translateY(-2px);
+}
+
+.tool-card.disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.tool-card.disabled:hover {
+    border-color: var(--border-color);
+    box-shadow: none;
+    transform: none;
+}
+
+.tool-card.disabled:hover::before {
+    opacity: 0;
+}
+
+/* 卡片头部 */
+.tool-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 1;
+}
+
+.tool-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+.tool-card:not(.disabled):hover .tool-icon {
+    background: rgba(var(--primary-rgb), 0.1);
+    color: var(--primary-color);
+}
+
+/* 状态徽章 */
+.tool-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--radius-full);
+    line-height: 1;
+}
+
+.tool-status.ready {
+    color: var(--success-color, #22c55e);
+    background: rgba(34, 197, 94, 0.12);
+}
+
+.tool-status.ready::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.tool-status.soon {
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+}
+
+/* 卡片主体 */
+.tool-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: relative;
+    z-index: 1;
+    flex: 1;
+}
+
+.tool-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.tool-desc {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* 卡片底部行动条 */
+.tool-card-foot {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.tool-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--primary-color);
+    transition: gap var(--transition-fast);
+}
+
+.tool-action.muted {
+    color: var(--text-muted);
+}
+
+.tool-card:not(.disabled):hover .tool-action {
+    gap: 8px;
+}
+
+/* ==================== Speed Test 样式 ==================== */
+.speedtest-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 24px;
+}
+
+.speedtest-gauge {
+    position: relative;
+}
+
+.gauge-circle {
+    position: relative;
+    width: 200px;
+    height: 200px;
+}
+
+.gauge-circle svg {
+    width: 100%;
+    height: 100%;
+}
+
+.gauge-value {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.gauge-value span:first-child {
+    display: block;
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.gauge-unit {
+    font-size: 16px;
+    color: var(--text-muted);
+}
+
+.speedtest-status {
+    font-size: 16px;
+    color: var(--text-muted);
+    min-height: 24px;
+}
+
+.speedtest-results {
+    display: flex;
+    gap: 40px;
+    margin: 16px 0;
+}
+
+.speedtest-results .result-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 0;
+    padding: 0;
+    background-color: transparent;
+}
+
+.result-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.result-icon.download {
+    background-color: rgba(46, 204, 113, 0.15);
+    color: var(--success-color);
+}
+
+.result-icon.upload {
+    background-color: rgba(52, 152, 219, 0.15);
+    color: var(--info-color);
+}
+
+.result-icon.latency {
+    background-color: rgba(241, 196, 15, 0.15);
+    color: var(--warning-color);
+}
+
+.result-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.result-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.result-value {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+#speedtest-progress {
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+/* ==================== 响应式布局 ==================== */
+@media (max-width: 1200px) {
+    .nettools-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .nettools-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .nettools-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>广播与环路检测工具</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #1a1a2e);
+            --text: var(--text-primary, #fff);
+            --text-muted: var(--text-muted, #888);
+            --text-sec: var(--text-secondary, #aaa);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.05));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.08));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.15));
+            --hr: var(--border-color, rgba(255, 255, 255, 0.08));
+            --hover-bg: rgba(255, 255, 255, 0.04);
+            --log-bg: var(--bg-secondary, rgba(0, 0, 0, 0.3));
+            --in-color: var(--success-color, #22c55e);
+            --out-color: #3b82f6;
+            --err-color: var(--danger-color, #ef4444);
+            --warn-color: var(--warning-color, #f59e0b);
+            --primary: var(--primary-color, #4f46e5);
+            --primary-hover: var(--primary-hover, #4338ca);
+            --row-alt: rgba(255, 255, 255, 0.02);
+            --glass-blur: blur(12px);
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f3f4f6);
+            --text: var(--text-primary, #1f2937);
+            --text-muted: var(--text-muted, #6b7280);
+            --text-sec: var(--text-secondary, #4b5563);
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, rgba(0, 0, 0, 0.15));
+            --hr: var(--border-color, rgba(0, 0, 0, 0.08));
+            --hover-bg: rgba(0, 0, 0, 0.03);
+            --log-bg: var(--bg-secondary, #fafafa);
+            --in-color: var(--success-color, #16a34a);
+            --out-color: #2563eb;
+            --err-color: var(--danger-color, #dc2626);
+            --warn-color: var(--warning-color, #d97706);
+            --primary: var(--primary-color, #4f46e5);
+            --primary-hover: var(--primary-hover, #4338ca);
+            --row-alt: rgba(0, 0, 0, 0.02);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 40px 16px 16px 16px;
+        }
+
+        /* ==================== Toolbar ==================== */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 14px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            margin-bottom: 12px;
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .toolbar-left, .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tool-title-area {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tool-title-icon {
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+        }
+
+        .tool-title-text h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .tool-title-text p {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        select {
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            padding: 6px 12px;
+            color: var(--text);
+            font-size: 0.85rem;
+            outline: none;
+            cursor: pointer;
+            min-width: 220px;
+            transition: all 0.15s;
+        }
+
+        select:focus {
+            border-color: var(--primary);
+        }
+
+        .btn {
+            padding: 6px 16px;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s;
+            font-family: inherit;
+            font-weight: 500;
+        }
+
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: var(--hover-bg);
+            color: var(--text);
+            border: 1px solid var(--card-border);
+        }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.08); }
+
+        .btn-danger {
+            background: var(--err-color);
+            color: #fff;
+        }
+        .btn-danger:hover { opacity: 0.9; }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+        .status-dot.active {
+            background: var(--in-color);
+            box-shadow: 0 0 8px var(--in-color);
+            animation: pulse 1.5s infinite;
+        }
+        .status-dot.error { background: var(--err-color); }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* ==================== Main Grid Layout ==================== */
+        .workspace {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        .col-left, .col-right {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        /* ==================== Cards ==================== */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            backdrop-filter: var(--glass-blur);
+        }
+
+        .card-header {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--hr);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-header h2 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-sec);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .card-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-body {
+            flex: 1;
+            padding: 12px;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        /* Canvas Chart Card Specific */
+        .chart-card {
+            flex: 3;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Alarm Log Card Specific */
+        .alarm-card {
+            flex: 2;
+        }
+
+        .alarm-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .alarm-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.2);
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .alarm-item.critical {
+            background: rgba(239, 68, 68, 0.08);
+        }
+
+        .alarm-item.warning {
+            background: rgba(245, 158, 11, 0.08);
+        }
+
+        .alarm-item.info {
+            background: rgba(59, 130, 246, 0.08);
+        }
+
+        .alarm-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .alarm-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .alarm-title.critical { color: var(--err-color); }
+        .alarm-title.warning { color: var(--warn-color); }
+        .alarm-title.info { color: var(--out-color); }
+
+        .alarm-desc {
+            color: var(--text-sec);
+            word-break: break-all;
+        }
+
+        .alarm-empty {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            padding: 24px 0;
+            font-style: italic;
+        }
+
+        /* Loop Status Indicators */
+        .stats-panel {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-shrink: 0;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .stat-val {
+            font-size: 1.2rem;
+            font-weight: 700;
+            font-family: 'Consolas', monospace;
+        }
+
+        .stat-val.normal { color: var(--in-color); }
+        .stat-val.warning { color: var(--warn-color); }
+        .stat-val.critical { color: var(--err-color); }
+
+        /* ARP & Table layouts */
+        .table-wrap {
+            height: 100%;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+            text-align: left;
+        }
+
+        th {
+            padding: 8px 10px;
+            background: var(--hover-bg);
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--hr);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--hr);
+            color: var(--text-sec);
+            font-family: 'Consolas', monospace;
+            word-break: break-all;
+        }
+
+        tr:nth-child(even) td { background: var(--row-alt); }
+        tr:hover td { background: var(--hover-bg); }
+
+        tr.danger-row td {
+            background: rgba(239, 68, 68, 0.08) !important;
+            color: var(--err-color) !important;
+        }
+
+        .conflict-badge {
+            background: var(--err-color);
+            color: #fff;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: bold;
+            display: inline-block;
+            margin-left: 4px;
+        }
+
+        /* Stream / Grid Card */
+        .stream-card {
+            flex: 1.5;
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: var(--input-border);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- TOP TOOLBAR -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="tool-title-area">
+                    <div class="tool-title-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12c0 2.76 1.12 5.26 2.93 7.07l1.41-1.41C4.95 16.27 4 14.24 4 12c0-4.42 3.58-8 8-8s8 3.58 8 8c0 2.24-.95 4.27-2.34 5.66l1.41 1.41C20.88 17.26 22 14.76 22 12c0-5.52-4.48-10-10-10zm0 4c-3.31 0-6 2.69-6 6 0 1.66.67 3.16 1.76 4.24l1.42-1.42C8.42 14.07 8 13.09 8 12c0-2.21 1.79-4 4-4s4 1.79 4 4c0 1.09-.42 2.07-1.18 2.82l1.42 1.42C17.33 15.16 18 13.66 18 12c0-3.31-2.69-6-6-6zm0 4c-1.1 0-2 .9-2 2 0 .55.22 1.05.59 1.41l1.41-1.41c-.01-.01-.01-.01 0 0 .55 0 1-.45 1-1 0-.55-.45-1-1-1z" />
+                        </svg>
+                    </div>
+                    <div class="tool-title-text">
+                        <h1>广播与环路检测</h1>
+                        <p>实时局域网广播风暴、ARP 漂移/欺骗与交换机物理环路监测面板</p>
+                    </div>
+                </div>
+            </div>
+            <div class="toolbar-right">
+                <select id="interface-select">
+                    <option value="">加载网卡列表中...</option>
+                </select>
+                <button class="btn btn-primary" id="btn-start">开始检测</button>
+                <button class="btn btn-danger" id="btn-stop" style="display: none;">停止检测</button>
+                <div class="status-badge">
+                    <div class="status-dot" id="status-dot"></div>
+                    <span id="status-text">准备就绪</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN APP WORKSPACE -->
+        <div class="workspace">
+            <!-- LEFT COLUMN (PPS Line Chart & Alarms) -->
+            <div class="col-left">
+                <!-- CHART CARD -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h2>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                            局域网广播/组播流量实时 PPS 波动图 (30秒)
+                        </h2>
+                        <div class="card-header-actions">
+                            <span style="font-size: 0.7rem; color: #4338ca; font-weight: 500;">● 组播</span>
+                            <span style="font-size: 0.7rem; color: #4f46e5; font-weight: 500;">● 广播</span>
+                            <span style="font-size: 0.7rem; color: #16a34a; font-weight: 500;">● ARP</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="pps-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ALARM CARD -->
+                <div class="card alarm-card">
+                    <div class="card-header">
+                        <h2>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                            诊断警告日志流
+                        </h2>
+                        <div class="card-header-actions">
+                            <button class="btn btn-primary btn-small" id="btn-simulate-test" style="background: var(--out-color);">模拟数据测试</button>
+                            <button class="btn btn-secondary btn-small" id="btn-clear-alarms">清空日志</button>
+                        </div>
+                    </div>
+                    <div class="card-body" id="alarm-body">
+                        <div class="alarm-list" id="alarm-list">
+                            <div class="alarm-empty">暂无安全和物理故障警告，网络状态良好</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- HELP / REFERENCE CARD -->
+                <div class="card collapsible collapsed" id="reference-card" style="margin-top: 10px; flex-shrink: 0;">
+                    <div class="card-header" style="cursor: pointer; padding: 8px 14px;" onclick="toggleReferenceCard()">
+                        <h2 style="font-size: 0.8rem;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                            指标参考与使用说明
+                        </h2>
+                        <span id="reference-toggle-icon" style="font-size: 0.7rem; color: var(--text-muted);">▼</span>
+                    </div>
+                    <div class="card-body" id="reference-body" style="display: none; font-size: 0.72rem; line-height: 1.5; color: var(--text-sec); padding: 10px 14px;">
+                        <div style="margin-bottom: 6px; font-weight: 600; color: var(--text);">📖 使用说明：</div>
+                        <ol style="margin-left: 14px; margin-bottom: 10px; padding-left: 0;">
+                            <li>请在右上角下拉列表中选择连接到目标局域网的<strong>网卡接口</strong>，并点击<strong>“开始检测”</strong>（在 Windows 嗅探物理网卡通常需要管理员提权）。</li>
+                            <li>若本地未安装捕获驱动（如 Npcap）或无管理员权限，可点击<strong>“模拟数据测试”</strong>对判定逻辑及图形化 PPS 折线图进行仿真运行。</li>
+                        </ol>
+                        <div style="margin-bottom: 6px; font-weight: 600; color: var(--text);">📊 诊断判定指标参考：</div>
+                        <ul style="margin-left: 14px; padding-left: 0; list-style-type: disc; margin-bottom: 10px;">
+                            <li style="margin-bottom: 3px;"><strong>ARP 漂移/欺骗：</strong>在 15 秒滑动窗内，若单个 IP 地址映射了 2 个及以上不同的物理 MAC 地址，触发 <code>ARP_DRIFT_DETECTED</code> 中间人攻击风险警报。</li>
+                            <li style="margin-bottom: 3px;"><strong>广播风暴：</strong>若广播帧速率超过 <code>500 PPS</code> 且广播数占总包数比例 <code>> 30%</code>，触发 <code>BROADCAST_STORM</code> 告警。</li>
+                            <li style="margin-bottom: 3px;"><strong>物理环路：</strong>若检测到同一 IP ID 数据帧在 5 秒内被交换机多端口循环复制转发 <code>> 50 次</code>，触发 <code>L2_LOOP_DETECTED</code> 高风险环路警报。</li>
+                        </ul>
+                        <div style="margin-bottom: 6px; font-weight: 600; color: var(--text);">🔧 底层运行依赖与安装入口：</div>
+                        <div style="margin-bottom: 8px;">该工具嗅探基于 <strong>Wireshark (Tshark)</strong> 抓包引擎及 <strong>Npcap</strong> 网卡驱动运行。若本机未就绪，请安装：</div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-secondary btn-small" onclick="require('electron').shell.openExternal('https://www.wireshark.org/download.html')" style="font-size: 0.7rem; padding: 4px 8px;">
+                                🌐 下载 Wireshark / Tshark
+                            </button>
+                            <button class="btn btn-secondary btn-small" onclick="require('electron').shell.openExternal('https://npcap.com/#download')" style="font-size: 0.7rem; padding: 4px 8px;">
+                                🛡️ 下载 Npcap 网卡驱动
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN (ARP Mapping & Loop Stats & Live stream) -->
+            <div class="col-right">
+                <!-- STATS & LOOP PANEL -->
+                <div class="stats-panel">
+                    <div class="stat-card">
+                        <div class="stat-label">网络广播占比</div>
+                        <div class="stat-val normal" id="stat-broadcast-ratio">0.0%</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">实时广播 PPS</div>
+                        <div class="stat-val normal" id="stat-pps">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">物理环路风险</div>
+                        <div class="stat-val normal" id="stat-loop-risk">安全</div>
+                    </div>
+                </div>
+
+                <!-- ARP TABLE CARD -->
+                <div class="card" style="flex: 2;">
+                    <div class="card-header">
+                        <h2>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            局域网 ARP 映射监测表 (IP → MAC)
+                        </h2>
+                        <div class="card-header-actions">
+                            <span style="font-size: 0.7rem; color: var(--text-muted);" id="arp-count">设备数: 0</span>
+                        </div>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-wrap">
+                            <table id="arp-table">
+                                <thead>
+                                    <tr>
+                                        <th>IP 地址</th>
+                                        <th>MAC 硬件地址</th>
+                                        <th>更新时间</th>
+                                        <th>检测状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="arp-table-body">
+                                    <tr>
+                                        <td colspan="4" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 20px;">等待捕获 ARP 流量...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LIVE PACKET STREAM CARD -->
+                <div class="card stream-card">
+                    <div class="card-header">
+                        <h2>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="4 17 10 11 4 5"></polyline>
+                                <line x1="12" y1="19" x2="20" y2="19"></line>
+                            </svg>
+                            二层网络活动数据流
+                        </h2>
+                    </div>
+                    <div class="card-body" style="padding: 0;">
+                        <div class="table-wrap">
+                            <table id="stream-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 70px;">时间</th>
+                                        <th style="width: 140px;">源 MAC</th>
+                                        <th style="width: 140px;">源 IP</th>
+                                        <th style="width: 80px;">协议</th>
+                                        <th>长度</th>
+                                        <th>包摘要信息</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stream-table-body">
+                                    <tr>
+                                        <td colspan="6" style="text-align: center; color: var(--text-muted); font-style: italic; padding: 20px;">等待数据包流入...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RENDERER SCRIPT -->
+    <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "test-device-001",
+    "name": "Test-Router-01",
+    "host": "192.168.1.1",
+    "port": 22,
+    "username": "admin",
+    "password": "",
+    "type": "router",
+    "group": "测试分组",
+    "favorite": false,
+    "online": true
+  },
+  {
+    "id": "test-device-002",
+    "name": "Test-Switch-01",
+    "host": "192.168.1.2",
+    "port": 22,
+    "username": "admin",
+    "password": "",
+    "type": "switch",
+    "group": "测试分组",
+    "favorite": true,
+    "online": false
+  }
+]

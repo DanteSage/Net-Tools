@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>TCP 工具 (Netcat)</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #1a1a2e);
+            --text: var(--text-primary, #fff);
+            --text-muted: var(--text-muted, #888);
+            --text-sec: var(--text-secondary, #aaa);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.06));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.1));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.15));
+            --tab-bg: rgba(255, 255, 255, 0.04);
+            --tab-active-bg: rgba(255, 255, 255, 0.08);
+            --hr: var(--border-color, rgba(255, 255, 255, 0.08));
+            --hover-bg: rgba(255, 255, 255, 0.04);
+            --log-bg: var(--bg-secondary, rgba(0, 0, 0, 0.3));
+            --in-color: var(--success-color, #22c55e);
+            --out-color: #3b82f6;
+            --err-color: var(--danger-color, #ef4444);
+            --warn-color: var(--warning-color, #f59e0b);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --row-alt: rgba(255, 255, 255, 0.02);
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f5f7fa);
+            --text: var(--text-primary, #1a1a2e);
+            --text-muted: var(--text-muted, #666);
+            --text-sec: var(--text-secondary, #555);
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, rgba(0, 0, 0, 0.15));
+            --tab-bg: transparent;
+            --tab-active-bg: rgba(0, 0, 0, 0.04);
+            --hr: var(--border-color, rgba(0, 0, 0, 0.08));
+            --hover-bg: rgba(0, 0, 0, 0.03);
+            --log-bg: var(--bg-secondary, #fafafa);
+            --in-color: var(--success-color, #16a34a);
+            --out-color: #2563eb;
+            --err-color: var(--danger-color, #dc2626);
+            --warn-color: var(--warning-color, #d97706);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --row-alt: rgba(0, 0, 0, 0.02);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 48px 20px 16px 20px;
+        }
+
+        /* ==================== Tabs ==================== */
+        .tabs {
+            display: flex;
+            gap: 6px;
+            border-bottom: 1px solid var(--hr);
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            padding: 9px 18px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            border-radius: 6px 6px 0 0;
+            position: relative;
+            transition: color 0.15s;
+        }
+
+        .tab:hover { color: var(--text); }
+
+        .tab.active {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            bottom: -1px;
+            height: 2px;
+            background: var(--primary);
+            border-radius: 1px;
+        }
+
+        /* ==================== Panel ==================== */
+        .panel {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .panel.active { display: flex; }
+
+        /* ==================== Card ==================== */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+
+        .card-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* ==================== Form ==================== */
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .form-row:last-child { margin-bottom: 0; }
+
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+
+        .form-group.span-2 { grid-column: span 2; }
+
+        .form-group label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        input[type="text"], input[type="number"], select, textarea {
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: var(--text);
+            font-size: 0.85rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+
+        textarea {
+            resize: none;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--text-sec);
+            cursor: pointer;
+        }
+
+        .checkbox-row input { cursor: pointer; }
+
+        /* ==================== Buttons ==================== */
+        .btn-group { display: flex; gap: 8px; align-items: stretch; }
+
+        .btn {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+        .btn-secondary {
+            background: var(--tab-active-bg);
+            color: var(--text);
+            border: 1px solid var(--input-border);
+        }
+
+        .btn-secondary:hover:not(:disabled) { background: var(--hover-bg); }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--err-color);
+            border: 1px solid var(--err-color);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .btn-small {
+            padding: 4px 10px;
+            font-size: 0.75rem;
+        }
+
+        /* ==================== Status ==================== */
+        .status-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            background: var(--hover-bg);
+            color: var(--text-sec);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .status-dot.connecting { background: var(--warn-color); animation: blink 1s infinite; }
+        .status-dot.online { background: var(--in-color); }
+        .status-dot.error { background: var(--err-color); }
+
+        @keyframes blink { 50% { opacity: 0.4; } }
+
+        /* ==================== Log ==================== */
+        .log {
+            flex: 1;
+            min-height: 0;
+            background: var(--log-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            user-select: text;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .log-line {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            padding: 2px 0;
+            border-radius: 2px;
+        }
+
+        .log-line .ts {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .log-line .tag {
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .log-line.in .tag { background: rgba(34, 197, 94, 0.15); color: var(--in-color); }
+        .log-line.out .tag { background: rgba(59, 130, 246, 0.15); color: var(--out-color); }
+        .log-line.sys .tag { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+        .log-line.err .tag { background: rgba(239, 68, 68, 0.15); color: var(--err-color); }
+
+        .log-line .body {
+            flex: 1;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text);
+        }
+
+        .log-line.err .body { color: var(--err-color); }
+
+        .log-empty {
+            color: var(--text-muted);
+            text-align: center;
+            padding: 24px 0;
+            font-style: italic;
+            font-size: 0.8rem;
+        }
+
+        /* ==================== Send box ==================== */
+        .send-box {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .send-box-toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .send-box-toolbar select {
+            padding: 4px 8px;
+            font-size: 0.75rem;
+        }
+
+        .send-box-row {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+        }
+
+        .send-box-row textarea {
+            flex: 1;
+            min-height: 60px;
+            max-height: 120px;
+        }
+
+        /* ==================== Server: Clients ==================== */
+        .clients-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .client-item {
+            display: grid;
+            grid-template-columns: 40px 1fr auto;
+            gap: 10px;
+            align-items: center;
+            padding: 6px 8px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            background: var(--hover-bg);
+        }
+
+        .client-item .cid {
+            font-weight: 600;
+            color: var(--primary);
+            font-family: monospace;
+        }
+
+        .client-item .addr {
+            color: var(--text-sec);
+            font-family: monospace;
+        }
+
+        .client-empty {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-align: center;
+            padding: 12px 0;
+            font-style: italic;
+        }
+
+        .client-selector {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ==================== Banner: Table ==================== */
+        .banner-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            min-width: 120px;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--hover-bg);
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.2s;
+        }
+
+        .progress-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .banner-results {
+            flex: 1;
+            min-height: 0;
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            overflow-y: auto;
+            background: var(--log-bg);
+        }
+
+        .banner-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+
+        .banner-table th {
+            position: sticky;
+            top: 0;
+            background: var(--card-bg);
+            text-align: left;
+            padding: 8px 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            border-bottom: 1px solid var(--card-border);
+            z-index: 1;
+        }
+
+        .banner-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid var(--hr);
+            color: var(--text);
+            vertical-align: top;
+        }
+
+        .banner-table tr:nth-child(even) td { background: var(--row-alt); }
+
+        .banner-table .col-banner {
+            font-family: monospace;
+            color: var(--text-sec);
+            font-size: 0.75rem;
+            max-width: 360px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .banner-table .status-open { color: var(--in-color); font-weight: 600; }
+        .banner-table .status-closed { color: var(--err-color); }
+        .banner-table .status-timeout { color: var(--warn-color); }
+
+        .banner-empty {
+            padding: 30px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+
+        /* ==================== Scrollbar ==================== */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: var(--input-border);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="client">客户端</button>
+            <button class="tab" data-tab="server">服务端</button>
+            <button class="tab" data-tab="banner">Banner 抓取</button>
+        </div>
+
+        <!-- ===================== Client Panel ===================== -->
+        <div class="panel active" data-panel="client">
+            <div class="card">
+                <div class="card-title">连接目标</div>
+                <div class="form-row">
+                    <div class="form-group span-2">
+                        <label>主机</label>
+                        <input type="text" id="client-host" value="127.0.0.1" placeholder="IP 或域名">
+                    </div>
+                    <div class="form-group">
+                        <label>端口</label>
+                        <input type="number" id="client-port" value="80" min="1" max="65535">
+                    </div>
+                    <div class="form-group">
+                        <label>超时 (ms)</label>
+                        <input type="number" id="client-timeout" value="5000" min="500">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="btn-group" style="grid-column: 1 / -1;">
+                        <button class="btn btn-primary" id="client-connect-btn" style="flex:1;">连接</button>
+                        <button class="btn btn-secondary" id="client-disconnect-btn" disabled>断开</button>
+                        <button class="btn btn-secondary" id="client-clear-btn">清空日志</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-line" id="client-status">
+                <span class="status-dot"></span>
+                <span class="status-text">未连接</span>
+            </div>
+
+            <div class="log" id="client-log">
+                <div class="log-empty">尚无数据。连接后这里会显示发送与接收的内容</div>
+            </div>
+
+            <div class="card send-box">
+                <div class="send-box-toolbar">
+                    <label class="checkbox-row">
+                        格式：
+                        <select id="client-format">
+                            <option value="text">文本</option>
+                            <option value="hex">HEX</option>
+                        </select>
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="checkbox" id="client-newline" checked>
+                        发送时追加 \r\n
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="checkbox" id="client-show-hex">
+                        日志显示 HEX
+                    </label>
+                </div>
+                <div class="send-box-row">
+                    <textarea id="client-input" placeholder="输入要发送的内容。Ctrl+Enter 发送" rows="2"></textarea>
+                    <button class="btn btn-primary" id="client-send-btn" disabled>发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================== Server Panel ===================== -->
+        <div class="panel" data-panel="server">
+            <div class="card">
+                <div class="card-title">监听配置</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>绑定地址</label>
+                        <input type="text" id="server-host" value="0.0.0.0" placeholder="0.0.0.0">
+                    </div>
+                    <div class="form-group">
+                        <label>端口</label>
+                        <input type="number" id="server-port" value="9999" min="1" max="65535">
+                    </div>
+                    <div class="form-group span-2">
+                        <label>&nbsp;</label>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" id="server-listen-btn" style="flex:1;">开始监听</button>
+                            <button class="btn btn-secondary" id="server-stop-btn" disabled>停止</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-line" id="server-status">
+                <span class="status-dot"></span>
+                <span class="status-text">未监听</span>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <span>连入客户端</span>
+                    <span id="server-client-count" style="color: var(--text-muted); font-size: 0.75rem;">0 个</span>
+                </div>
+                <div class="clients-list" id="server-clients">
+                    <div class="client-empty">暂无连入客户端</div>
+                </div>
+            </div>
+
+            <div class="log" id="server-log">
+                <div class="log-empty">尚无数据。等待客户端连入后会显示日志</div>
+            </div>
+
+            <div class="card send-box">
+                <div class="send-box-toolbar">
+                    <label class="checkbox-row">
+                        发送给：
+                        <select id="server-target">
+                            <option value="all">所有客户端</option>
+                        </select>
+                    </label>
+                    <label class="checkbox-row">
+                        格式：
+                        <select id="server-format">
+                            <option value="text">文本</option>
+                            <option value="hex">HEX</option>
+                        </select>
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="checkbox" id="server-newline" checked>
+                        追加 \r\n
+                    </label>
+                </div>
+                <div class="send-box-row">
+                    <textarea id="server-input" placeholder="输入要发送的内容。Ctrl+Enter 发送" rows="2"></textarea>
+                    <button class="btn btn-primary" id="server-send-btn" disabled>发送</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===================== Banner Panel ===================== -->
+        <div class="panel" data-panel="banner">
+            <div class="card">
+                <div class="card-title">抓取目标</div>
+                <div class="form-row">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>目标列表（每行一条，格式 host:port 或 host port）</label>
+                        <textarea id="banner-targets" rows="3" placeholder="127.0.0.1:80&#10;example.com:22&#10;192.168.1.1 443"></textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>超时 (ms)</label>
+                        <input type="number" id="banner-timeout" value="3000" min="500">
+                    </div>
+                    <div class="form-group">
+                        <label>并发数</label>
+                        <input type="number" id="banner-concurrency" value="20" min="1" max="100">
+                    </div>
+                    <div class="form-group span-2">
+                        <label>主动探测字符串（可选）</label>
+                        <input type="text" id="banner-probe" placeholder="留空则只读取被动 banner">
+                    </div>
+                </div>
+                <div class="banner-controls">
+                    <button class="btn btn-primary" id="banner-start-btn">开始抓取</button>
+                    <button class="btn btn-secondary" id="banner-stop-btn" disabled>停止</button>
+                    <button class="btn btn-secondary" id="banner-clear-btn">清空</button>
+                    <button class="btn btn-secondary" id="banner-export-btn" disabled>导出 CSV</button>
+                    <div class="progress-bar"><div class="progress-bar-fill" id="banner-progress-fill"></div></div>
+                    <span class="progress-text" id="banner-progress-text">就绪</span>
+                </div>
+            </div>
+
+            <div class="banner-results">
+                <table class="banner-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;">#</th>
+                            <th style="width:180px;">主机</th>
+                            <th style="width:80px;">端口</th>
+                            <th style="width:80px;">状态</th>
+                            <th style="width:60px;">大小</th>
+                            <th>Banner</th>
+                        </tr>
+                    </thead>
+                    <tbody id="banner-tbody">
+                    </tbody>
+                </table>
+                <div class="banner-empty" id="banner-empty">无结果。请填入目标后点击「开始抓取」</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

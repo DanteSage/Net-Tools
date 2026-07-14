@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>加载中...</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* 默认深色主题 */
+        :root {
+            --splash-bg: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            --splash-particle: rgba(0, 212, 255, 0.6);
+            --splash-accent-1: #00d4ff;
+            --splash-accent-2: #00ff88;
+            --splash-accent-3: #a855f7;
+            --splash-subtitle: #888;
+            --splash-loading-track: rgba(255, 255, 255, 0.12);
+            --splash-loading-text: #888;
+            --splash-version: #555;
+            --splash-glow: rgba(0, 212, 255, 0.5);
+        }
+
+        /* 浅色主题色板 */
+        body[data-mode="light"] {
+            --splash-bg: linear-gradient(135deg, #f1f5f9 0%, #e0e7ff 50%, #dbeafe 100%);
+            --splash-particle: rgba(59, 130, 246, 0.45);
+            --splash-accent-1: #3b82f6;
+            --splash-accent-2: #06b6d4;
+            --splash-accent-3: #8b5cf6;
+            --splash-subtitle: #64748b;
+            --splash-loading-track: rgba(59, 130, 246, 0.15);
+            --splash-loading-text: #64748b;
+            --splash-version: #94a3b8;
+            --splash-glow: rgba(59, 130, 246, 0.35);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--splash-bg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            -webkit-app-region: drag;
+        }
+
+        /* 背景动画粒子 */
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: var(--splash-particle);
+            border-radius: 50%;
+            animation: float 15s infinite;
+            opacity: 0;
+        }
+
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 1s; }
+        .particle:nth-child(3) { left: 30%; animation-delay: 2s; }
+        .particle:nth-child(4) { left: 40%; animation-delay: 3s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 4s; }
+        .particle:nth-child(6) { left: 60%; animation-delay: 5s; }
+        .particle:nth-child(7) { left: 70%; animation-delay: 6s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 7s; }
+        .particle:nth-child(9) { left: 90%; animation-delay: 8s; }
+        .particle:nth-child(10) { left: 15%; animation-delay: 0.5s; }
+        .particle:nth-child(11) { left: 25%; animation-delay: 1.5s; }
+        .particle:nth-child(12) { left: 35%; animation-delay: 2.5s; }
+        .particle:nth-child(13) { left: 45%; animation-delay: 3.5s; }
+        .particle:nth-child(14) { left: 55%; animation-delay: 4.5s; }
+        .particle:nth-child(15) { left: 65%; animation-delay: 5.5s; }
+        .particle:nth-child(16) { left: 75%; animation-delay: 6.5s; }
+        .particle:nth-child(17) { left: 85%; animation-delay: 7.5s; }
+        .particle:nth-child(18) { left: 95%; animation-delay: 8.5s; }
+        .particle:nth-child(19) { left: 5%; animation-delay: 9s; }
+        .particle:nth-child(20) { left: 50%; animation-delay: 9.5s; }
+
+        @keyframes float {
+            0% {
+                transform: translateY(100vh) scale(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100vh) scale(1);
+                opacity: 0;
+            }
+        }
+
+        /* Logo 容器 */
+        .logo-container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 主 Logo */
+        .logo {
+            width: 100px;
+            height: 100px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .logo-ring {
+            position: absolute;
+            border: 3px solid transparent;
+            border-radius: 50%;
+            animation: spin 3s linear infinite;
+        }
+
+        .logo-ring-1 {
+            width: 100%;
+            height: 100%;
+            border-top-color: var(--splash-accent-1);
+            border-right-color: var(--splash-accent-1);
+        }
+
+        .logo-ring-2 {
+            width: 80%;
+            height: 80%;
+            top: 10%;
+            left: 10%;
+            border-bottom-color: var(--splash-accent-2);
+            border-left-color: var(--splash-accent-2);
+            animation-direction: reverse;
+            animation-duration: 2s;
+        }
+
+        .logo-ring-3 {
+            width: 60%;
+            height: 60%;
+            top: 20%;
+            left: 20%;
+            border-top-color: var(--splash-accent-3);
+            border-right-color: var(--splash-accent-3);
+            animation-duration: 1.5s;
+        }
+
+        .logo-center {
+            position: absolute;
+            width: 40%;
+            height: 40%;
+            top: 30%;
+            left: 30%;
+            background: linear-gradient(135deg, var(--splash-accent-1), var(--splash-accent-2));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 30px var(--splash-glow);
+        }
+
+        .logo-center svg {
+            width: 24px;
+            height: 24px;
+            fill: #fff;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* 应用名称 */
+        .app-name {
+            font-size: 28px;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--splash-accent-1), var(--splash-accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+            letter-spacing: 2px;
+        }
+
+        .app-subtitle {
+            font-size: 14px;
+            color: var(--splash-subtitle);
+            margin-bottom: 40px;
+        }
+
+        /* 加载进度条 */
+        .loading-bar {
+            width: 200px;
+            height: 3px;
+            background: var(--splash-loading-track);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, var(--splash-accent-1), var(--splash-accent-2), var(--splash-accent-3));
+            background-size: 200% 100%;
+            border-radius: 3px;
+            animation: loading 1.5s ease-in-out infinite, gradient 2s linear infinite;
+        }
+
+        @keyframes loading {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+
+        /* 加载文本 */
+        .loading-text {
+            font-size: 13px;
+            color: var(--splash-loading-text);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* 版本号 */
+        .version {
+            position: absolute;
+            bottom: 20px;
+            font-size: 12px;
+            color: var(--splash-version);
+        }
+    </style>
+    <script>
+        // 在最早期根据 URL query 给 body 设 data-mode
+        (function () {
+            try {
+                var p = new URLSearchParams(window.location.search);
+                var mode = p.get('mode') === 'light' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-mode', mode);
+                document.addEventListener('DOMContentLoaded', function () {
+                    document.body.setAttribute('data-mode', mode);
+                });
+            } catch (_) { /* ignore */ }
+        })();
+    </script>
+</head>
+<body>
+    <!-- 背景粒子 -->
+    <div class="particles">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <!-- Logo -->
+    <div class="logo-container">
+        <div class="logo">
+            <div class="logo-ring logo-ring-1"></div>
+            <div class="logo-ring logo-ring-2"></div>
+            <div class="logo-ring logo-ring-3"></div>
+            <div class="logo-center">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+            </div>
+        </div>
+
+        <div class="app-name">Net Tools</div>
+        <div class="app-subtitle">网络运维工具集</div>
+
+        <div class="loading-bar">
+            <div class="loading-progress"></div>
+        </div>
+        <div class="loading-text">正在加载...</div>
+    </div>
+
+    <div class="version">v1.1.5</div>
+</body>
+</html>

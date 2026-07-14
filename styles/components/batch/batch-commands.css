@@ -1,0 +1,512 @@
+/**
+ * 批量执行 - 命令编辑器样式
+ */
+
+/* 命令编辑器 */
+.command-editor {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.toolbar-hint {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.editor-toolbar .btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+}
+
+.command-editor textarea {
+    border: none;
+    border-radius: 0;
+    resize: vertical;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* 命令预览区域 */
+.command-preview {
+    margin-top: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.command-preview .preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.command-preview .preview-content {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    background: var(--bg-primary);
+}
+
+.command-preview .preview-group {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.command-preview .preview-group:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.command-preview .preview-group-title {
+    font-size: 11px;
+    color: var(--primary);
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.command-preview .preview-cmd {
+    padding: 2px 0;
+    color: var(--text-primary);
+}
+
+.command-preview .preview-info {
+    padding: 10px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.command-preview .preview-info strong {
+    color: var(--primary);
+}
+
+.command-preview .preview-warning {
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    background: rgba(241, 196, 15, 0.15);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-sm);
+    color: var(--warning);
+    font-size: 12px;
+}
+
+/* 变量插入菜单 */
+.variable-insert-menu {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    min-width: 180px;
+    overflow: hidden;
+}
+
+.variable-insert-menu .menu-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.variable-insert-menu .menu-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.variable-insert-menu .menu-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.variable-insert-menu .menu-item .var-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--primary);
+}
+
+.variable-insert-menu .menu-item .var-count {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* 执行选项 */
+.options-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px 16px;
+}
+
+.option-group {
+    margin-bottom: 0;
+}
+
+.option-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.option-label input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+}
+
+.option-sub {
+    margin-top: 4px;
+    margin-left: 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.option-sub label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.option-sub input {
+    width: 70px;
+    padding: 4px 8px;
+    font-size: 12px;
+    background: var(--bg-secondary);
+}
+
+/* 变量列表 */
+.variables-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.variable-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.variable-item input {
+    flex: 1;
+    padding: 5px 10px;
+    font-size: 12px;
+    background: var(--bg-secondary);
+}
+
+.variable-item .var-name {
+    max-width: 100px;
+    font-family: var(--font-mono);
+}
+
+/* ==================== 配置命令页面 V2 ==================== */
+.batch-config-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 16px;
+    min-height: 0;
+}
+
+.batch-config-layout .batch-card-command {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.batch-config-layout .batch-card-command .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.batch-config-layout .batch-card-options {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.batch-config-layout .batch-card-options .card-body {
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* 命令输入卡片 */
+.batch-card-command .header-title,
+.batch-card-options .header-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.batch-card-command .header-title svg,
+.batch-card-options .header-title svg {
+    color: var(--primary);
+}
+
+.batch-card-command .header-title h3,
+.batch-card-options .header-title h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* 命令编辑器 V2 */
+.command-editor-v2 {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: border-color 0.2s ease;
+}
+
+.command-editor-v2:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+}
+
+.command-editor-v2 textarea {
+    flex: 1;
+    min-height: 200px;
+    padding: 14px 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    background: transparent;
+    border: none;
+    resize: none;
+    color: var(--text-primary);
+}
+
+.command-editor-v2 textarea:focus {
+    outline: none;
+}
+
+.command-editor-v2 textarea::placeholder {
+    color: var(--text-muted);
+}
+
+.editor-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
+}
+
+.editor-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.line-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.editor-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.editor-hint svg {
+    opacity: 0.6;
+}
+
+.editor-hint code {
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    color: var(--primary);
+    font-size: 10px;
+}
+
+/* 执行选项 V2 */
+.options-v2 {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.option-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.option-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.option-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.option-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.option-input input {
+    width: 60px;
+    padding: 4px 8px;
+    font-size: 12px;
+    text-align: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+}
+
+.option-input input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.option-input span {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* 开关样式 */
+.switch-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.switch-label input {
+    display: none;
+}
+
+.switch-slider {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background: var(--bg-tertiary);
+    border-radius: 9px;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.switch-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: var(--bg-card);
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch-label input:checked + .switch-slider {
+    background: var(--success, #22c55e);
+}
+
+.switch-label input:checked + .switch-slider::after {
+    transform: translateX(14px);
+}
+
+.switch-text {
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+/* 其他选项区 */
+.option-toggles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.option-toggles .switch-label {
+    padding: 4px 0;
+}
+
+/* 禁用状态联动 */
+.option-item.disabled .option-input input {
+    opacity: 0.4;
+    pointer-events: none;
+    background: var(--bg-tertiary);
+}
+
+/* ==================== 亮色主题适配 ==================== */
+
+/* 命令编辑器 */
+[data-theme="light"] .command-editor-v2 {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .editor-footer {
+    background: var(--bg-tertiary);
+}
+
+/* 选项区域 */
+[data-theme="light"] .option-item {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .option-toggles {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .switch-slider {
+    background: var(--bg-tertiary);
+}

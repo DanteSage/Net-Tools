@@ -1,0 +1,137 @@
+/**
+ * 自定义标题栏 - 无边框窗口顶部
+ */
+
+/* ==================== 变量 ==================== */
+:root {
+    --titlebar-height: 48px;
+}
+
+/* ==================== 容器 ==================== */
+.titlebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--titlebar-height);
+    display: flex;
+    align-items: stretch;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 9999;
+    user-select: none;
+}
+
+/* 让主容器从标题栏下方开始 */
+body {
+    padding-top: var(--titlebar-height);
+}
+
+.app-container {
+    height: calc(100vh - var(--titlebar-height));
+}
+
+/* ==================== 品牌区（与侧边栏同宽） ==================== */
+.titlebar-brand {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    border-right: 1px solid var(--border-color);
+    -webkit-app-region: drag;
+    pointer-events: none; /* 内部纯展示，整体可拖动 */
+}
+
+.titlebar-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--primary-color), #6366f1);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(var(--primary-rgb), 0.35);
+    flex-shrink: 0;
+}
+
+.titlebar-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.titlebar-version {
+    margin-left: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+/* ==================== 拖动区域 ==================== */
+.titlebar-drag {
+    flex: 1;
+    -webkit-app-region: drag;
+}
+
+/* ==================== 控制按钮 ==================== */
+.titlebar-controls {
+    display: flex;
+    align-items: stretch;
+    -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+    width: 46px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+    padding: 0;
+    outline: none;
+}
+
+.titlebar-btn:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.titlebar-btn:active {
+    background-color: var(--border-color);
+}
+
+.titlebar-btn-close:hover {
+    background-color: #e81123;
+    color: #ffffff;
+}
+
+.titlebar-btn-close:active {
+    background-color: #c50f1f;
+    color: #ffffff;
+}
+
+/* 最大化/还原图标切换 */
+.titlebar-btn .icon-restore {
+    display: none;
+}
+
+.titlebar.is-maximized .titlebar-btn .icon-max {
+    display: none;
+}
+
+.titlebar.is-maximized .titlebar-btn .icon-restore {
+    display: block;
+}

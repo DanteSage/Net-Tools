@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DHCP 服务器</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #10121e);
+            --text: var(--text-primary, #ffffff);
+            --text-muted: var(--text-muted, #8892b0);
+            --text-sec: var(--text-secondary, #cbd5e1);
+            --border-color: var(--border-color, rgba(255, 255, 255, 0.08));
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.04));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.08));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.12));
+            --result-bg: var(--bg-secondary, rgba(255, 255, 255, 0.02));
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #10121e);
+            --danger: var(--danger-color, #ef4444);
+            --danger-hover: #dc2626;
+            --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+            --glass-blur: blur(16px);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            --success: #10b981;
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f8fafc);
+            --text: var(--text-primary, #0f172a);
+            --text-muted: var(--text-muted, #64748b);
+            --text-sec: var(--text-secondary, #334155);
+            --border-color: var(--border-color, rgba(0, 0, 0, 0.08));
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, #cbd5e1);
+            --result-bg: var(--bg-secondary, #f1f5f9);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --header-bg: var(--bg-primary, #ffffff);
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            --success: #059669;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Frameless Titlebar dragging */
+        .window-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 48px;
+            padding: 0 16px;
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            -webkit-app-region: drag;
+            flex-shrink: 0;
+        }
+
+        .window-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .window-controls-placeholder {
+            width: 138px;
+            flex-shrink: 0;
+        }
+
+        /* Content spacing */
+        .app-content {
+            flex: 1;
+            min-height: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Grid layout for configuration and leases */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 16px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* Card Container Styles */
+        .card-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        .panel-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .config-form {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-right: 4px;
+        }
+
+        .instruction-box {
+            margin-top: 10px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px dashed var(--border-color);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        :root.light-theme .instruction-box {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .instruction-title {
+            font-weight: 600;
+            color: var(--text-sec);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Form styling */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-sec);
+        }
+
+        .required-star {
+            color: var(--danger);
+            margin-right: 3px;
+            font-weight: bold;
+        }
+
+        .form-control {
+            width: 100%;
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.8rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+
+        .form-control:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .form-row-double {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* Leases Table */
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--input-bg);
+        }
+
+        .leases-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            text-align: left;
+        }
+
+        .leases-table th, .leases-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .leases-table th {
+            background: rgba(0, 0, 0, 0.15);
+            color: var(--text);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        :root.light-theme .leases-table th {
+            background: rgba(0, 0, 0, 0.04);
+        }
+
+        .leases-table td {
+            color: var(--text-sec);
+        }
+
+        .leases-table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        :root.light-theme .leases-table tbody tr:hover {
+            background: rgba(0, 0, 0, 0.01);
+        }
+
+        .leases-empty {
+            padding: 40px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        /* Logging Console */
+        .log-section {
+            height: 180px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .log-console {
+            flex: 1;
+            min-height: 0;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.78rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-sec);
+        }
+
+        .log-line {
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            margin-right: 8px;
+        }
+
+        .log-info {
+            color: var(--text-sec);
+        }
+
+        .log-cmd {
+            color: var(--primary);
+        }
+
+        .log-success {
+            color: var(--success);
+        }
+
+        .log-err {
+            color: var(--danger);
+        }
+
+        /* Footer buttons control */
+        .action-footer {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            padding-top: 4px;
+            flex-shrink: 0;
+        }
+
+        .btn {
+            height: 36px;
+            padding: 0 24px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            color: var(--text-sec);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
+            color: var(--text);
+        }
+
+        :root.light-theme .btn-secondary {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+
+        :root.light-theme .btn-secondary:hover:not(:disabled) {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Toasts style */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1a1d30;
+            border: 1px solid var(--border-color);
+            padding: 10px 20px;
+            border-radius: 6px;
+            color: #ffffff;
+            font-size: 0.82rem;
+            box-shadow: var(--shadow);
+            transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 9999;
+            pointer-events: none;
+            backdrop-filter: var(--glass-blur);
+        }
+        
+        :root.light-theme .toast {
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.success {
+            border-color: var(--success);
+            background: #064e3b;
+            color: #a7f3d0;
+        }
+
+        :root.light-theme .toast.success {
+            background: #ecfdf5;
+            color: #065f46;
+            border-color: #10b981;
+        }
+
+        .toast.error {
+            border-color: var(--danger);
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        :root.light-theme .toast.error {
+            background: #fef2f2;
+            color: #991b1b;
+            border-color: #ef4444;
+        }
+
+        /* Scrollbars styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Header button next to window controls */
+        .header-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-sec);
+            font-size: 0.72rem;
+            padding: 3px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            transition: all 0.2s;
+            outline: none;
+            user-select: none;
+            height: 24px;
+            -webkit-app-region: no-drag;
+        }
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: var(--text);
+        }
+        .header-btn.active {
+            background: var(--primary);
+            color: #ffffff;
+            border-color: var(--primary);
+        }
+        .header-btn.active:hover {
+            background: var(--primary-hover);
+        }
+        :root.light-theme .header-btn {
+            background: rgba(0, 0, 0, 0.04);
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+        :root.light-theme .header-btn:hover {
+            background: rgba(0, 0, 0, 0.08);
+            color: #0f172a;
+        }
+        :root.light-theme .header-btn.active {
+            background: var(--primary);
+            color: #ffffff;
+            border-color: var(--primary);
+        }
+
+        /* Instructions side panel */
+        .instructions-panel {
+            width: 300px;
+            flex-shrink: 0;
+            animation: slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Modal dialog overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease-out;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-container {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            width: 400px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            transform: scale(0.92);
+            transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            backdrop-filter: var(--glass-blur);
+        }
+        .modal-overlay.show .modal-container {
+            transform: scale(1);
+        }
+        .modal-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .modal-body {
+            font-size: 0.82rem;
+            color: var(--text-sec);
+            line-height: 1.5;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        /* Revoke button hover effect */
+        .btn-revoke-lease:hover {
+            background: rgba(239, 68, 68, 0.1) !important;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <!-- Frameless Window Titlebar Header -->
+    <div class="window-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="window-title">DHCP 服务器</div>
+            <button id="btn-toggle-instructions" class="header-btn" title="查看使用说明">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                使用说明
+            </button>
+        </div>
+        <div class="window-controls-placeholder"></div>
+    </div>
+
+    <div class="app-content" style="display: flex; flex-direction: row; gap: 16px; width: 100%; height: 100%;">
+        <div class="main-layout-area" style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; height: 100%;">
+            <!-- Main Layout Split -->
+        <div class="main-grid">
+            <!-- Left Card: Configurations -->
+            <div class="card-panel">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94 0 .32.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                    </svg>
+                    服务器配置
+                </div>
+
+                <div class="config-form">
+                    <!-- Interface IP -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                            <span class="form-label"><span class="required-star">*</span>网卡 IP</span>
+                            <a href="#" id="btn-refresh-interfaces" style="font-size: 0.75rem; color: var(--primary); text-decoration: none; display: flex; align-items: center; gap: 4px; transition: opacity 0.2s;">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                                    <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                </svg>
+                                刷新网卡
+                            </a>
+                        </div>
+                        <select id="server-interface-ip" class="form-control">
+                            <!-- Loaded dynamically -->
+                        </select>
+                    </div>
+
+                    <!-- IP Pool Range (Start / End) -->
+                    <div class="form-row-double">
+                        <div class="form-group">
+                            <span class="form-label"><span class="required-star">*</span>起始 IP</span>
+                            <input type="text" id="server-start-ip" class="form-control" placeholder="192.168.1.100">
+                        </div>
+                        <div class="form-group">
+                            <span class="form-label"><span class="required-star">*</span>结束 IP</span>
+                            <input type="text" id="server-end-ip" class="form-control" placeholder="192.168.1.200">
+                        </div>
+                    </div>
+
+                    <!-- Subnet mask -->
+                    <div class="form-group">
+                        <span class="form-label"><span class="required-star">*</span>子网掩码</span>
+                        <input type="text" id="server-mask" class="form-control" placeholder="255.255.255.0" value="255.255.255.0">
+                    </div>
+
+                    <!-- Gateway -->
+                    <div class="form-group">
+                        <span class="form-label">默认网关</span>
+                        <input type="text" id="server-gateway" class="form-control" placeholder="192.168.1.1 (选填)">
+                    </div>
+
+                    <!-- DNS (DNS 1 / DNS 2) -->
+                    <div class="form-row-double">
+                        <div class="form-group">
+                            <span class="form-label">首选 DNS</span>
+                            <input type="text" id="server-dns1" class="form-control" placeholder="8.8.8.8" value="8.8.8.8">
+                        </div>
+                        <div class="form-group">
+                            <span class="form-label">备用 DNS</span>
+                            <input type="text" id="server-dns2" class="form-control" placeholder="114.114.114.114">
+                        </div>
+                    </div>
+
+                    <!-- Lease time -->
+                    <div class="form-group">
+                        <span class="form-label"><span class="required-star">*</span>IP 地址租约时长</span>
+                        <select id="server-lease-time" class="form-control">
+                            <option value="3600">1 小时</option>
+                            <option value="28800">8 小时</option>
+                            <option value="86400" selected>24 小时 (1天)</option>
+                            <option value="604800">7 天</option>
+                        </select>
+                    </div>
+
+
+                </div>
+            </div>
+
+            <!-- Right Card: Active IP Leases Table -->
+            <div class="card-panel">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2c1.66 0 3-1.34 3-3S7.66 5 6 5 3 6.34 6 7s1.34 3 3 3zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4zm-9 4c0-.75.29-1.42.78-1.95C8.07 15.4 6.94 15 6 15c-1.86 0-5.5 1.04-5.5 3v2h5v-2z"/>
+                    </svg>
+                    活动 IP 租约
+                </div>
+                <div class="table-container">
+                    <table class="leases-table" id="leases-table">
+                        <thead>
+                            <tr>
+                                <th>MAC 地址</th>
+                                <th>已分配 IP</th>
+                                <th>客户端主机名</th>
+                                <th>租约到期时间</th>
+                                <th style="text-align: center; width: 80px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leases-table-body">
+                            <!-- Lease data dynamically populated -->
+                            <tr>
+                                <td colspan="5" class="leases-empty">当前没有分配中的活跃 IP 租约</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logging Console Area -->
+        <div class="log-section">
+            <span class="section-title">日志控制台</span>
+            <div id="log-console" class="log-console"></div>
+        </div>
+
+        <!-- Footer Control Buttons -->
+        <div class="action-footer">
+            <button id="btn-start" class="btn btn-primary">开始服务</button>
+            <button id="btn-stop" class="btn btn-secondary" disabled>停止服务</button>
+        </div>
+        </div>
+
+        <!-- Right side Instructions Panel -->
+        <div id="instructions-panel" class="instructions-panel" style="display: none;">
+            <div class="panel-title">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                使用说明与帮助
+            </div>
+            <div class="instructions-content" style="flex: 1; overflow-y: auto; font-size: 0.8rem; line-height: 1.6; color: var(--text-sec); display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
+                <p>1. <strong>网卡 IP 静态配置</strong>：启动 DHCP 服务前，请确保所选网卡已在系统中配置了静态 IP（不能是“自动获取 IP”）。</p>
+                <p>2. <strong>分配范围合理性</strong>：起始与结束 IP 必须与选定的网卡 IP 在同一网段内（例如网卡为 192.168.1.1，分配范围可为 192.168.1.100 ~ 200）。</p>
+                <p>3. <strong>管理员特权运行</strong>：DHCP 服务需占用系统 <strong>UDP 67</strong> 端口，如启动失败报错 EACCES，请右键选择“以管理员身份运行”打开本软件。</p>
+                <p>4. <strong>处理端口冲突</strong>：如提示 EADDRINUSE 被占用，请确保系统没有开启“Internet 连接共享 (ICS)”或其他 DHCP 服务器进程。</p>
+                
+                <div style="margin-top: 8px; border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="font-weight: 600; color: var(--text); font-size: 0.85rem;">常见问题排查</div>
+                    <div style="font-size: 0.76rem; background: rgba(255,255,255,0.01); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); line-height: 1.5;">
+                        <strong style="color: var(--primary);">Q: 为什么客户端无法获取 IP？</strong><br/>
+                        <span style="color: var(--text-muted);">A: 请确认物理网络连接正常，且防火墙未阻止 UDP 67/68 端口广播，或虚拟机网卡已设为桥接模式。</span>
+                    </div>
+                    <div style="font-size: 0.76rem; background: rgba(255,255,255,0.01); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); line-height: 1.5;">
+                        <strong style="color: var(--primary);">Q: 能否自定义路由选项？</strong><br/>
+                        <span style="color: var(--text-muted);">A: 可以。在左侧面板填写“默认网关”与“DNS”参数后，DHCP 协议会自动向客户端下发对应的路由和域名解析规则。</span>
+                    </div>
+                    <div style="font-size: 0.76rem; background: rgba(255,255,255,0.01); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); line-height: 1.5;">
+                        <strong style="color: var(--primary);">Q: 为什么重启 DHCP 服务后终端无法再获取地址？</strong><br/>
+                        <span style="color: var(--text-muted);">A: 客户端系统存在本地租约缓存。若网线一直物理连着没有重新连接过程，客户端不会向新服务器发起申请。您可以<b>重新拔插网线</b>、或者在客户端上<b>将网卡禁用再启用</b>来强制其刷新触发获取。</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Toast -->
+    <div id="toast" class="toast">提示信息</div>
+
+    <!-- Custom Close Confirmation Modal -->
+    <div id="close-modal" class="modal-overlay">
+        <div class="modal-container">
+            <div class="modal-title">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--danger)" style="vertical-align: middle;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                </svg>
+                <span>关闭确认</span>
+            </div>
+            <div class="modal-body">
+                DHCP 服务正在运行中，关闭窗口将停止 DHCP 服务，确定要关闭吗？
+            </div>
+            <div class="modal-footer">
+                <button id="modal-btn-cancel" class="btn btn-secondary" style="height: 32px; padding: 0 16px;">取消</button>
+                <button id="modal-btn-confirm" class="btn btn-primary" style="height: 32px; padding: 0 16px; background: var(--danger);">确定关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const os = require('os');
+
+        let isRunning = false;
+
+        // Form elements
+        const interfaceSelect = document.getElementById('server-interface-ip');
+        const startIpInput = document.getElementById('server-start-ip');
+        const endIpInput = document.getElementById('server-end-ip');
+        const maskInput = document.getElementById('server-mask');
+        const gatewayInput = document.getElementById('server-gateway');
+        const dns1Input = document.getElementById('server-dns1');
+        const dns2Input = document.getElementById('server-dns2');
+        const leaseSelect = document.getElementById('server-lease-time');
+
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const btnRefreshInterfaces = document.getElementById('btn-refresh-interfaces');
+        const logConsole = document.getElementById('log-console');
+        const leasesTableBody = document.getElementById('leases-table-body');
+        const btnToggleInstructions = document.getElementById('btn-toggle-instructions');
+        const instructionsPanel = document.getElementById('instructions-panel');
+        const closeModal = document.getElementById('close-modal');
+        const modalBtnCancel = document.getElementById('modal-btn-cancel');
+        const modalBtnConfirm = document.getElementById('modal-btn-confirm');
+
+        // Initial net interfaces load
+        function initNetworkInterfaces() {
+            const interfaces = os.networkInterfaces();
+            interfaceSelect.innerHTML = '';
+
+            const optAll = document.createElement('option');
+            optAll.value = '0.0.0.0';
+            optAll.textContent = '0.0.0.0 (侦听所有网卡)';
+            interfaceSelect.appendChild(optAll);
+
+            for (const name of Object.keys(interfaces)) {
+                for (const netInfo of interfaces[name]) {
+                    if (netInfo.family === 'IPv4') {
+                        const opt = document.createElement('option');
+                        opt.value = netInfo.address;
+                        opt.textContent = `${netInfo.address} - ${name}`;
+                        interfaceSelect.appendChild(opt);
+                    }
+                }
+            }
+        }
+
+        // Auto-configure start/end IP placeholder or values based on net interface selection
+        function handleInterfaceChange() {
+            const selectedIp = interfaceSelect.value;
+            if (selectedIp === '0.0.0.0') {
+                startIpInput.value = '';
+                endIpInput.value = '';
+                gatewayInput.value = '';
+                return;
+            }
+
+            // Simple auto-fill suggestion (e.g. 192.168.1.1 -> Suggest range 192.168.1.100 to 192.168.1.200)
+            const parts = selectedIp.split('.');
+            if (parts.length === 4) {
+                const prefix = `${parts[0]}.${parts[1]}.${parts[2]}`;
+                startIpInput.value = `${prefix}.100`;
+                endIpInput.value = `${prefix}.200`;
+                gatewayInput.value = `${prefix}.1`;
+            }
+        }
+
+        interfaceSelect.addEventListener('change', handleInterfaceChange);
+
+        // Refresh interfaces click listener
+        btnRefreshInterfaces.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (isRunning) return;
+            initNetworkInterfaces();
+            handleInterfaceChange();
+            showToast('网卡列表已刷新', 'success');
+        });
+
+        // Toast alert
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            if (type === 'error') {
+                toast.classList.add('error');
+            } else if (type === 'success') {
+                toast.classList.add('success');
+            }
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Console Log helper
+        function appendLog(text, type = 'info') {
+            const line = document.createElement('div');
+            line.className = 'log-line';
+
+            const now = new Date().toLocaleTimeString();
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-time';
+            timeSpan.textContent = `[${now}]`;
+            line.appendChild(timeSpan);
+
+            const contentSpan = document.createElement('span');
+            if (type === 'success') {
+                contentSpan.className = 'log-success';
+            } else if (type === 'error') {
+                contentSpan.className = 'log-err';
+            } else if (type === 'cmd') {
+                contentSpan.className = 'log-cmd';
+            } else {
+                contentSpan.className = 'log-info';
+            }
+
+            contentSpan.textContent = text;
+            line.appendChild(contentSpan);
+
+            logConsole.appendChild(line);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // Render Leases list
+        function renderLeases(leasesList) {
+            leasesTableBody.innerHTML = '';
+            if (!leasesList || leasesList.length === 0) {
+                leasesTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="leases-empty">当前没有分配中的活跃 IP 租约</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            leasesList.sort((a, b) => a.ip.localeCompare(b.ip)); // Sort by IP address
+
+            for (const item of leasesList) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${item.mac}</strong></td>
+                    <td><span style="color: var(--primary); font-weight: 500;">${item.ip}</span></td>
+                    <td>${item.hostname}</td>
+                    <td>${item.expiresAt}</td>
+                    <td style="text-align: center;">
+                        <button class="btn-revoke-lease" data-mac="${item.mac}" style="background: transparent; border: none; color: var(--danger); font-size: 0.75rem; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.2s; -webkit-app-region: no-drag;">
+                            回收
+                        </button>
+                    </td>
+                `;
+                leasesTableBody.appendChild(tr);
+            }
+
+            // Bind click events to revoke buttons
+            const revokeButtons = leasesTableBody.querySelectorAll('.btn-revoke-lease');
+            revokeButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const mac = e.target.getAttribute('data-mac');
+                    ipcRenderer.send('dhcpServer:revoke-lease', mac);
+                });
+            });
+        }
+
+        // Form fields state toggle
+        function setFieldsDisabled(disabled) {
+            isRunning = disabled;
+            interfaceSelect.disabled = disabled;
+            startIpInput.disabled = disabled;
+            endIpInput.disabled = disabled;
+            maskInput.disabled = disabled;
+            gatewayInput.disabled = disabled;
+            dns1Input.disabled = disabled;
+            dns2Input.disabled = disabled;
+            leaseSelect.disabled = disabled;
+
+            if (disabled) {
+                btnRefreshInterfaces.style.opacity = '0.4';
+                btnRefreshInterfaces.style.pointerEvents = 'none';
+            } else {
+                btnRefreshInterfaces.style.opacity = '1';
+                btnRefreshInterfaces.style.pointerEvents = 'auto';
+            }
+        }
+
+        // IP validation regex
+        const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+
+        function isValidIp(ip) {
+            return ipRegex.test(ip.trim());
+        }
+
+        // Toggle instructions panel
+        let showInstructions = false;
+        btnToggleInstructions.addEventListener('click', (e) => {
+            e.preventDefault();
+            showInstructions = !showInstructions;
+            const currentHeight = window.outerHeight;
+            const currentWidth = window.outerWidth;
+
+            if (showInstructions) {
+                window.resizeTo(currentWidth + 300, currentHeight);
+                instructionsPanel.style.display = 'flex';
+                btnToggleInstructions.classList.add('active');
+                btnToggleInstructions.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                    收起说明
+                `;
+            } else {
+                window.resizeTo(Math.max(1000, currentWidth - 300), currentHeight);
+                instructionsPanel.style.display = 'none';
+                btnToggleInstructions.classList.remove('active');
+                btnToggleInstructions.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                    </svg>
+                    使用说明
+                `;
+            }
+        });
+
+        // Show custom modal when main process requests close
+        ipcRenderer.on('dhcpServer:request-close', () => {
+            closeModal.classList.add('show');
+        });
+
+        // Cancel button click
+        modalBtnCancel.addEventListener('click', () => {
+            closeModal.classList.remove('show');
+        });
+
+        // Confirm button click
+        modalBtnConfirm.addEventListener('click', () => {
+            closeModal.classList.remove('show');
+            ipcRenderer.send('dhcpServer:confirm-close');
+        });
+
+        // Press Esc to close modal
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && closeModal.classList.contains('show')) {
+                closeModal.classList.remove('show');
+            }
+        });
+
+        // Start service
+        btnStart.addEventListener('click', async () => {
+            const startIp = startIpInput.value.trim();
+            const endIp = endIpInput.value.trim();
+            const mask = maskInput.value.trim();
+            const gateway = gatewayInput.value.trim();
+            const dns1 = dns1Input.value.trim();
+            const dns2 = dns2Input.value.trim();
+
+            // Form Validations
+            if (!isValidIp(startIp)) {
+                showToast('起始 IP 地址格式不正确', 'error');
+                return;
+            }
+            if (!isValidIp(endIp)) {
+                showToast('结束 IP 地址格式不正确', 'error');
+                return;
+            }
+            if (!isValidIp(mask)) {
+                showToast('子网掩码格式不正确', 'error');
+                return;
+            }
+            if (gateway && !isValidIp(gateway)) {
+                showToast('默认网关 IP 格式不正确', 'error');
+                return;
+            }
+            if (dns1 && !isValidIp(dns1)) {
+                showToast('首选 DNS 格式不正确', 'error');
+                return;
+            }
+            if (dns2 && !isValidIp(dns2)) {
+                showToast('备用 DNS 格式不正确', 'error');
+                return;
+            }
+
+            btnStart.disabled = true;
+            btnStart.textContent = '启动中...';
+
+            const dnsList = [];
+            if (dns1) dnsList.push(dns1);
+            if (dns2) dnsList.push(dns2);
+
+            const config = {
+                interfaceIp: interfaceSelect.value,
+                startIp,
+                endIp,
+                subnetMask: mask,
+                gateway: gateway || null,
+                dnsList,
+                leaseTime: parseInt(leaseSelect.value, 10)
+            };
+
+            const res = await ipcRenderer.invoke('dhcpServer:start', config);
+            if (res.success) {
+                showToast('DHCP 服务端已成功启动', 'success');
+                setFieldsDisabled(true);
+                btnStart.textContent = '服务中';
+                btnStart.disabled = true;
+                btnStop.disabled = false;
+            } else {
+                let errorMsg = res.error;
+                // Graceful privileges hints for binding port 67 on Windows/Unix
+                if (res.error.includes('EACCES')) {
+                    errorMsg = '权限不足（无法绑定 UDP 端口 67）。请尝试以管理员身份运行此工具包软件。';
+                } else if (res.error.includes('EADDRINUSE')) {
+                    errorMsg = '端口 67 已被占用。请确保系统未开启网络共享、未运行其他 DHCP 服务器。';
+                }
+                showToast('启动失败: ' + errorMsg, 'error');
+                appendLog(`启动服务失败: ${res.error}`, 'error');
+                btnStart.disabled = false;
+                btnStart.textContent = '开始服务';
+                btnStop.disabled = true;
+            }
+        });
+
+        // Stop service
+        btnStop.addEventListener('click', async () => {
+            btnStop.disabled = true;
+            btnStop.textContent = '停止中...';
+
+            const res = await ipcRenderer.invoke('dhcpServer:stop');
+            if (res.success) {
+                showToast('DHCP 服务已成功停止', 'success');
+                setFieldsDisabled(false);
+                btnStart.disabled = false;
+                btnStart.textContent = '开始服务';
+                btnStop.textContent = '停止服务';
+                btnStop.disabled = true;
+                renderLeases([]); // Clear leases table
+            } else {
+                showToast('关闭服务异常: ' + res.error, 'error');
+                btnStop.disabled = false;
+                btnStop.textContent = '停止服务';
+            }
+        });
+
+        // Logger and lease updates listener
+        ipcRenderer.on('dhcpServer:log', (event, logObj) => {
+            appendLog(logObj.message, logObj.type);
+        });
+
+        ipcRenderer.on('dhcpServer:leases', (event, leases) => {
+            renderLeases(leases);
+        });
+
+        // Theme integration logic
+        function applyTheme(theme) {
+            if (!theme) return;
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+
+        const _qs = new URLSearchParams(location.search);
+        const _qsMode = _qs.get('mode');
+        const _qsTheme = _qs.get('theme');
+        if (_qsMode || _qsTheme) {
+            applyTheme({ mode: _qsMode, key: _qsTheme });
+        } else {
+            ipcRenderer.invoke('theme:get').then(theme => {
+                applyTheme(theme);
+            }).catch(() => {});
+        }
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+
+        // Initialize Page
+        document.addEventListener('DOMContentLoaded', () => {
+            initNetworkInterfaces();
+            handleInterfaceChange();
+            appendLog('DHCP 服务器工具就绪。请确认分配参数并点击 [开始服务] 启动。');
+        });
+    </script>
+</body>
+</html>

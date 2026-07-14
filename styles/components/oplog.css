@@ -1,0 +1,750 @@
+/**
+ * 操作记录样式 - 远程操作日志列表、查看器、设置
+ */
+
+/* ==================== 操作记录页面 ==================== */
+.oplog-container {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 16px;
+    height: 100%;
+}
+
+/* 左侧列表面板 */
+.oplog-list-panel {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 工具栏 */
+.oplog-toolbar {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.oplog-search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    height: 30px;
+    box-sizing: border-box;
+    transition: border-color var(--transition-fast);
+}
+
+.oplog-search-box:focus-within {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.oplog-search-box svg {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.oplog-search-box input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+}
+
+.oplog-filters {
+    display: flex;
+    gap: 8px;
+}
+
+.oplog-filter-select {
+    padding: 5px 8px;
+    font-size: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+    width: auto;
+    height: 30px;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.oplog-filter-select:focus {
+    border-color: var(--primary-color);
+}
+
+/* 统计栏 */
+.oplog-stats {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 12px;
+}
+
+.oplog-stats strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* 批量操作栏 */
+.oplog-batch-bar {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 4px;
+}
+
+.oplog-batch-bar .btn {
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
+.btn-ghost {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-ghost:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn-danger-text {
+    color: var(--danger-color);
+}
+
+.btn-danger-text:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+}
+
+/* 列表 */
+.oplog-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.oplog-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.oplog-item:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+}
+
+.oplog-item:focus {
+    outline: none;
+}
+
+.oplog-item.selected {
+    background: rgba(var(--primary-rgb), 0.08);
+    border-color: var(--primary);
+}
+
+.oplog-checkbox {
+    flex-shrink: 0;
+}
+
+.oplog-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+}
+
+/* 设备图标 */
+.oplog-item-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.oplog-item-icon.router { color: var(--primary-color); }
+.oplog-item-icon.switch { color: var(--success-color); }
+.oplog-item-icon.firewall { color: var(--danger-color); }
+.oplog-item-icon.server { color: var(--warning-color); }
+
+.oplog-item-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.oplog-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.oplog-device-name {
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 连接类型标签 */
+.oplog-conn-type {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.oplog-conn-type.ssh {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: var(--primary-color);
+}
+
+.oplog-conn-type.telnet {
+    background-color: rgba(234, 179, 8, 0.15);
+    color: var(--warning-color);
+}
+
+.oplog-conn-type.serial {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: var(--success-color);
+}
+
+.oplog-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.oplog-separator {
+    opacity: 0.5;
+}
+
+/* 加载状态 */
+.oplog-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-muted);
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 空状态 */
+.oplog-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+}
+
+.oplog-empty-icon {
+    color: var(--text-muted);
+    opacity: 0.3;
+    margin-bottom: 16px;
+}
+
+.oplog-empty-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin: 0 0 4px 0;
+}
+
+.oplog-empty-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* 右侧查看器 */
+.oplog-viewer {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.oplog-viewer .viewer-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 40px;
+}
+
+.oplog-viewer .placeholder-icon {
+    opacity: 0.2;
+    margin-bottom: 20px;
+}
+
+.oplog-viewer .viewer-placeholder h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 0 8px 0;
+}
+
+.oplog-viewer .viewer-placeholder p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0 0 24px 0;
+}
+
+.placeholder-tips {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tip-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.tip-item svg {
+    color: var(--success-color);
+    opacity: 0.7;
+}
+
+/* 查看器头部 */
+.oplog-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    gap: 16px;
+}
+
+.oplog-viewer-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.oplog-viewer-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.oplog-viewer-icon.router { color: var(--primary-color); }
+.oplog-viewer-icon.switch { color: var(--success-color); }
+.oplog-viewer-icon.firewall { color: var(--danger-color); }
+.oplog-viewer-icon.server { color: var(--warning-color); }
+
+.oplog-viewer-meta {
+    min-width: 0;
+}
+
+.oplog-viewer-title {
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.oplog-viewer-details {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.oplog-viewer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.oplog-viewer-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    height: 30px;
+    box-sizing: border-box;
+}
+
+.oplog-viewer-search:focus-within {
+    border-color: var(--primary-color);
+}
+
+.oplog-viewer-search svg {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.oplog-viewer-search input {
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    width: 100px;
+}
+
+#oplog-search-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* 内容区域 */
+.oplog-content {
+    flex: 1;
+    padding: 0;
+    overflow: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 20px;
+    background-color: var(--terminal-bg);
+    color: var(--terminal-text);
+    position: relative;
+}
+
+/* 虚拟滚动容器 */
+.oplog-virtual-spacer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    pointer-events: none;
+}
+
+.oplog-virtual-content {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 20px;
+    padding: 0 16px;
+    margin: 0;
+    white-space: pre;
+    color: inherit;
+    position: relative;
+    min-height: 100%;
+}
+
+.oplog-line {
+    display: flex;
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 20px;
+    line-height: 20px;
+    white-space: pre;
+    padding: 0 16px;
+}
+
+.oplog-line:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.oplog-line.highlight {
+    background: rgba(var(--primary-rgb), 0.15);
+}
+
+.oplog-line .line-number {
+    display: inline-block;
+    min-width: 50px;
+    color: var(--text-muted);
+    text-align: right;
+    padding-right: 12px;
+    margin-right: 8px;
+    border-right: 1px solid var(--border-color);
+    user-select: none;
+    flex-shrink: 0;
+    opacity: 0.6;
+}
+
+.oplog-line .line-content {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.oplog-line mark {
+    background: var(--warning-color);
+    color: var(--bg-primary);
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+/* 简单模式内容区域 */
+.oplog-simple-content {
+    padding: 0;
+}
+
+.oplog-simple-content .oplog-line {
+    position: relative;
+}
+
+/* 语法高亮 */
+.log-prompt {
+    color: #58a6ff;
+}
+
+.log-timestamp {
+    color: #8b949e;
+}
+
+.log-ip {
+    color: #d2a8ff;
+}
+
+.log-success {
+    color: #3fb950;
+}
+
+.log-error {
+    color: #f85149;
+}
+
+.log-warning {
+    color: #d29922;
+}
+
+.log-separator {
+    color: #484f58;
+}
+
+.log-title {
+    color: #58a6ff;
+    font-weight: bold;
+}
+
+/* 搜索高亮 */
+.search-highlight {
+    background-color: rgba(234, 179, 8, 0.4);
+    color: inherit;
+    padding: 1px 2px;
+    border-radius: 2px;
+}
+
+/* ==================== 操作日志设置弹窗 ==================== */
+
+.modal-content.oplog-settings-modal {
+    max-width: 560px;
+    width: 90%;
+}
+
+.oplog-settings-modal .modal-body {
+    padding: 20px 24px;
+}
+
+.oplog-settings-modal .form-group {
+    margin-bottom: 20px;
+}
+
+.oplog-settings-modal .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.oplog-settings-modal .form-group > label:not(.checkbox-label) {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.oplog-dir-input {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.oplog-dir-input input[type="text"] {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 13px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+}
+
+.oplog-dir-input input[type="text"]:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+.oplog-settings-modal .form-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+.oplog-settings-modal .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    transition: background-color var(--transition-fast);
+}
+
+.oplog-settings-modal .checkbox-label:hover {
+    background: var(--bg-secondary);
+}
+
+.oplog-settings-modal .checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+}
+
+.oplog-settings-modal .checkbox-label span {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.oplog-settings-modal .modal-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+/* ==================== 亮色主题适配 ==================== */
+
+/* 远程记录搜索框和筛选 */
+[data-theme="light"] .oplog-search-box,
+[data-theme="light"] .oplog-filter-select {
+    background: var(--bg-card);
+}
+
+/* 远程记录列表项 */
+[data-theme="light"] .oplog-item {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .oplog-item:hover {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .oplog-item.selected {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: var(--primary-color);
+}
+
+[data-theme="light"] .oplog-item .oplog-item-icon {
+    background: var(--bg-tertiary);
+}
+
+/* 远程记录查看器 */
+[data-theme="light"] .oplog-viewer {
+    background: var(--bg-card);
+}
+
+[data-theme="light"] .oplog-viewer-header {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .oplog-content {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .oplog-line:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .oplog-line.highlight {
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* Light theme settings modal */
+[data-theme="light"] .oplog-settings-modal .checkbox-label {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .oplog-settings-modal .checkbox-label:hover {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="light"] .oplog-dir-input input[type="text"] {
+    background: var(--bg-tertiary);
+}

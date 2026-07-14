@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+  <title>PacketCapture - 网络抓包工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- 自定义标题栏 -->
+  <div class="titlebar">
+    <div class="titlebar-drag">
+      <div class="titlebar-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+          <path d="M2 17l10 5 10-5"></path>
+          <path d="M2 12l10 5 10-5"></path>
+        </svg>
+      </div>
+      <span class="titlebar-title">PacketCapture - 网络抓包工具</span>
+    </div>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn" id="btn-minimize">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect y="5" width="12" height="2" fill="currentColor"/></svg>
+      </button>
+      <button class="titlebar-btn" id="btn-maximize">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+      </button>
+      <button class="titlebar-btn titlebar-btn-close" id="btn-close">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 主容器 -->
+  <div class="container">
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="btn btn-primary" id="btn-start">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          开始
+        </button>
+        <button class="btn btn-danger" id="btn-stop" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16"/></svg>
+          停止
+        </button>
+        <div class="toolbar-divider"></div>
+        <button class="btn btn-secondary" id="btn-clear">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          清除
+        </button>
+        <button class="btn btn-secondary" id="btn-import">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          导入
+        </button>
+        <button class="btn btn-secondary" id="btn-export">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          导出
+        </button>
+        <button class="btn btn-secondary" id="btn-stats">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          统计
+        </button>
+      </div>
+      <div class="toolbar-center">
+        <div class="filter-row">
+          <div class="interface-select-group">
+            <label>网卡:</label>
+            <select class="interface-select" id="interface-select">
+              <option value="0">所有网卡</option>
+            </select>
+          </div>
+          <div class="filter-input-group">
+            <input type="text" class="filter-input" id="filter-input" placeholder="例: tcp, udp, ip.SrcAddr == 192.168.1.1" autocomplete="off">
+            <div class="filter-autocomplete" id="filter-autocomplete"></div>
+          </div>
+          <div class="filter-presets">
+            <button class="preset-btn" data-filter="tcp">TCP</button>
+            <button class="preset-btn" data-filter="udp">UDP</button>
+            <button class="preset-btn" data-filter="icmp">ICMP</button>
+            <button class="preset-btn" data-filter="tcp.DstPort == 80 or tcp.DstPort == 443">HTTP/S</button>
+            <button class="preset-btn" data-filter="udp.DstPort == 53 or udp.SrcPort == 53">DNS</button>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <button class="theme-toggle" id="theme-toggle" title="切换主题">
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <div class="status-item" id="admin-status"></div>
+      </div>
+    </div>
+
+    <!-- 状态栏 -->
+    <div class="status-bar">
+      <div class="status-item">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span id="status-text">就绪</span>
+      </div>
+      <div class="status-item">
+        <span>数据包: </span>
+        <span id="packet-count" class="highlight">0</span>
+      </div>
+      <div class="status-item">
+        <span>显示: </span>
+        <span id="display-count" class="highlight">0</span>
+      </div>
+    </div>
+
+    <!-- 三面板主内容区 -->
+    <div class="main-content">
+      <!-- 上方：数据包列表 -->
+      <div class="panel packet-list-panel" id="packet-list-panel">
+        <div class="panel-header">
+          <span>数据包列表</span>
+          <input type="text" class="search-input" id="search-input" placeholder="搜索...">
+        </div>
+        <div class="table-container">
+          <table class="packet-table">
+            <thead>
+              <tr>
+                <th class="th-no">No.</th>
+                <th class="th-time">时间</th>
+                <th class="th-src">源地址</th>
+                <th class="th-dst">目标地址</th>
+                <th class="th-protocol">协议</th>
+                <th class="th-length">长度</th>
+                <th class="th-info">信息</th>
+              </tr>
+            </thead>
+            <tbody id="packet-list"></tbody>
+          </table>
+        </div>
+        <div class="empty-message" id="empty-message">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+          <p>点击"开始"按钮开始捕获网络数据包</p>
+          <p class="hint">需要以管理员权限运行</p>
+        </div>
+      </div>
+
+      <!-- 分隔线 -->
+      <div class="resizer" id="resizer1"></div>
+
+      <!-- 中间：协议详情 -->
+      <div class="panel detail-panel" id="detail-panel">
+        <div class="panel-header">
+          <span>协议详情</span>
+        </div>
+        <div class="protocol-tree" id="protocol-tree">
+          <div class="placeholder">选择一个数据包查看详情</div>
+        </div>
+      </div>
+
+      <!-- 分隔线 -->
+      <div class="resizer" id="resizer2"></div>
+
+      <!-- 下方：十六进制查看器 -->
+      <div class="panel hex-panel" id="hex-panel">
+        <div class="panel-header">
+          <span>数据 (Hex + ASCII)</span>
+        </div>
+        <div class="hex-viewer" id="hex-viewer">
+          <div class="placeholder">选择一个数据包查看原始数据</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 统计弹窗 -->
+  <div class="modal-overlay" id="stats-modal" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">
+        <span>流量统计</span>
+        <button class="modal-close" id="stats-close">×</button>
+      </div>
+      <div class="modal-content">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-title">数据包总数</div>
+            <div class="stat-value" id="stat-total">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">协议分布</div>
+            <div class="stat-chart" id="stat-protocols"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">Top 源 IP</div>
+            <div class="stat-list" id="stat-sources"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">Top 目标 IP</div>
+            <div class="stat-list" id="stat-destinations"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

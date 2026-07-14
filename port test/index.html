@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>端口探测工具</title>
+    <!-- 引入系统内置的多主题样式表，支持 10 款 VS Code 经典与流行社区主题 -->
+    <link rel="stylesheet" href="../styles/components/themes.css">
+    <script>
+        try {
+            const _m = new URLSearchParams(location.search).get('mode');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+        } catch(e) {}
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg: var(--bg-primary, #1a1a2e);
+            --text: var(--text-primary, #fff);
+            --text-muted: var(--text-muted, #888);
+            --text-sec: var(--text-secondary, #aaa);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.06));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.1));
+            --input-bg: rgba(0, 0, 0, 0.25);
+            --input-border: var(--border-light, rgba(255, 255, 255, 0.15));
+            --tab-bg: rgba(255, 255, 255, 0.04);
+            --tab-active-bg: rgba(255, 255, 255, 0.08);
+            --hr: var(--border-color, rgba(255, 255, 255, 0.08));
+            --hover-bg: rgba(255, 255, 255, 0.04);
+            --log-bg: rgba(0, 0, 0, 0.3);
+            --in-color: var(--success-color, #22c55e);
+            --out-color: #3b82f6;
+            --err-color: var(--danger-color, #ef4444);
+            --warn-color: var(--warning-color, #f59e0b);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --row-alt: rgba(255, 255, 255, 0.02);
+        }
+
+        :root.light-theme {
+            --bg: var(--bg-primary, #f5f7fa);
+            --text: var(--text-primary, #1a1a2e);
+            --text-muted: var(--text-muted, #666);
+            --text-sec: var(--text-secondary, #555);
+            --card-bg: var(--bg-card, #ffffff);
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.08));
+            --input-bg: var(--bg-primary, #ffffff);
+            --input-border: var(--border-light, rgba(0, 0, 0, 0.15));
+            --tab-bg: transparent;
+            --tab-active-bg: rgba(0, 0, 0, 0.04);
+            --hr: var(--border-color, rgba(0, 0, 0, 0.08));
+            --hover-bg: rgba(0, 0, 0, 0.03);
+            --log-bg: var(--bg-secondary, #fafafa);
+            --in-color: var(--success-color, #16a34a);
+            --out-color: #2563eb;
+            --err-color: var(--danger-color, #dc2626);
+            --warn-color: var(--warning-color, #d97706);
+            --primary: var(--primary-color, #2563eb);
+            --primary-hover: var(--primary-hover, #1d4ed8);
+            --row-alt: rgba(0, 0, 0, 0.02);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 32px;
+            background: var(--bg);
+            z-index: 999;
+            pointer-events: none;
+            -webkit-app-region: drag;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 48px 20px 16px 20px;
+        }
+
+        /* ==================== Tabs ==================== */
+        .tabs {
+            display: flex;
+            gap: 6px;
+            border-bottom: 1px solid var(--hr);
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            padding: 9px 18px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            border-radius: 6px 6px 0 0;
+            position: relative;
+            transition: color 0.15s;
+        }
+
+        .tab:hover { color: var(--text); }
+
+        .tab.active {
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            bottom: -1px;
+            height: 2px;
+            background: var(--primary);
+            border-radius: 1px;
+        }
+
+        /* ==================== Panel ==================== */
+        .panel {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .panel.active { display: flex; }
+
+        /* ==================== Card ==================== */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+
+        .card-title {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* ==================== Form ==================== */
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .form-row:last-child { margin-bottom: 0; }
+
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+
+        .form-group.span-2 { grid-column: span 2; }
+
+        .form-group label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        input[type="text"], input[type="number"], select, textarea {
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: var(--text);
+            font-size: 0.85rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.15s;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+
+        /* ==================== Buttons ==================== */
+        .btn-group { display: flex; gap: 8px; width: 100%; }
+
+        .btn {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+        .btn-secondary {
+            background: var(--tab-active-bg);
+            color: var(--text);
+            border: 1px solid var(--input-border);
+        }
+
+        .btn-secondary:hover:not(:disabled) { background: var(--hover-bg); }
+
+        .btn-small {
+            padding: 4px 10px;
+            font-size: 0.75rem;
+        }
+
+        /* ==================== Preset buttons ==================== */
+        .preset-btns {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .preset-btn {
+            padding: 5px 10px;
+            font-size: 0.75rem;
+            background: var(--tab-active-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            color: var(--text-sec);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .preset-btn:hover {
+            background: var(--hover-bg);
+            color: var(--text);
+            border-color: var(--primary);
+        }
+
+        .preset-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        /* ==================== Progress ==================== */
+        .progress-section {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .progress-section.show {
+            display: flex;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--hover-bg);
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.2s;
+        }
+
+        .progress-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        /* ==================== Results Section ==================== */
+        .results-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 4px;
+        }
+
+        .results-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 0.8rem;
+            color: var(--text-sec);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stat-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .stat-dot.open { background: var(--in-color); }
+        .stat-dot.closed { background: var(--err-color); }
+
+        .filter-group {
+            display: flex;
+            gap: 6px;
+        }
+
+        .banner-results {
+            flex: 1;
+            min-height: 0;
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            overflow-y: auto;
+            background: var(--log-bg);
+        }
+
+        .banner-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+
+        .banner-table th {
+            position: sticky;
+            top: 0;
+            background: var(--card-bg);
+            text-align: left;
+            padding: 8px 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            border-bottom: 1px solid var(--card-border);
+            z-index: 1;
+        }
+
+        .banner-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid var(--hr);
+            color: var(--text);
+            vertical-align: top;
+        }
+
+        .banner-table tr:nth-child(even) td { background: var(--row-alt); }
+
+        .status-open { color: var(--in-color); font-weight: 600; }
+        .status-closed { color: var(--err-color); }
+
+        .banner-empty {
+            padding: 30px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-style: italic;
+        }
+
+        /* ==================== Status Line ==================== */
+        .status-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            background: var(--hover-bg);
+            color: var(--text-sec);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .status-dot.connecting { background: var(--warn-color); animation: blink 1s infinite; }
+        .status-dot.online { background: var(--in-color); }
+        .status-dot.error { background: var(--err-color); }
+
+        @keyframes blink { 50% { opacity: 0.4; } }
+
+        /* ==================== Log Console ==================== */
+        .log {
+            flex: 1;
+            min-height: 0;
+            background: var(--log-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            user-select: text;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .log-line {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            padding: 2px 0;
+            border-radius: 2px;
+        }
+
+        .log-line .ts {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .log-line .tag {
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .log-line.in .tag { background: rgba(34, 197, 94, 0.15); color: var(--in-color); }
+        .log-line.out .tag { background: rgba(59, 130, 246, 0.15); color: var(--out-color); }
+        .log-line.sys .tag { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+        .log-line.err .tag { background: rgba(239, 68, 68, 0.15); color: var(--err-color); }
+
+        .log-line .body {
+            flex: 1;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text);
+        }
+
+        .log-line.err .body { color: var(--err-color); }
+
+        .log-empty {
+            color: var(--text-muted);
+            text-align: center;
+            padding: 24px 0;
+            font-style: italic;
+            font-size: 0.8rem;
+        }
+
+        /* ==================== Scrollbar ==================== */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: var(--input-border);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="scan">端口扫描</button>
+            <button class="tab" data-tab="quick">快速测试</button>
+        </div>
+
+        <!-- ===================== Port Scan Panel ===================== -->
+        <div class="panel active" data-panel="scan">
+            <div class="card">
+                <div class="card-title">
+                    <span>扫描配置</span>
+                    <span style="font-size: 0.75rem; color: var(--err-color);">仅支持 TCP 协议</span>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group span-2">
+                        <label>目标主机</label>
+                        <input type="text" id="hostInput" placeholder="IP 地址或域名，如 192.168.1.1" value="127.0.0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>超时 (ms)</label>
+                        <input type="number" id="timeoutInput" value="2000" min="100" max="30000">
+                    </div>
+                    <div class="form-group">
+                        <label>并发数</label>
+                        <input type="number" id="concurrencyInput" value="50" min="1" max="200">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>端口范围</label>
+                        <input type="text" id="portsInput" placeholder="如: 80,443,8080 或 1-1000">
+                    </div>
+                </div>
+
+                <div class="preset-btns" style="margin-bottom: 10px;">
+                    <button class="preset-btn" data-ports="21,22,23,25,80,443,3389,8080">常用端口</button>
+                    <button class="preset-btn" data-ports="1-100">1-100</button>
+                    <button class="preset-btn" data-ports="1-1024">1-1024</button>
+                    <button class="preset-btn" data-ports="1-65535">全端口</button>
+                    <button class="preset-btn" data-ports="3306,5432,1433,1521,6379,27017">数据库</button>
+                    <button class="preset-btn" data-ports="80,443,8080,8443,8000,3000">Web服务</button>
+                </div>
+
+                <div class="form-row" style="margin-top: 10px;">
+                    <div class="btn-group" style="grid-column: 1 / -1;">
+                        <button class="btn btn-primary" id="scanBtn" style="flex: 1;">开始扫描</button>
+                        <button class="btn btn-secondary" id="stopBtn" disabled>停止</button>
+                        <button class="btn btn-secondary" id="clearBtn">清空</button>
+                        <button class="btn btn-secondary" id="exportCsvBtn" disabled>导出 CSV</button>
+                    </div>
+                </div>
+
+                <div class="progress-section" id="progressSection">
+                    <div class="progress-bar"><div class="progress-bar-fill" id="progressFill"></div></div>
+                    <span class="progress-text" id="progressText">就绪</span>
+                </div>
+            </div>
+
+            <div class="results-toolbar">
+                <div class="results-stats">
+                    <span class="stat-item"><span class="stat-dot open"></span>开放: <strong id="openCount">0</strong></span>
+                    <span class="stat-item"><span class="stat-dot closed"></span>关闭/过滤: <strong id="closedCount">0</strong></span>
+                </div>
+                <div class="filter-group">
+                    <button class="btn btn-secondary btn-small" data-filter="all">全部</button>
+                    <button class="btn btn-secondary btn-small active" data-filter="open">开放</button>
+                    <button class="btn btn-secondary btn-small" data-filter="closed">关闭/过滤</button>
+                </div>
+            </div>
+
+            <div class="banner-results" id="resultsSection">
+                <table class="banner-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 100px;">端口</th>
+                            <th style="width: 120px;">状态</th>
+                            <th>服务</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                    </tbody>
+                </table>
+                <div class="banner-empty" id="resultsEmpty">无结果。请填入目标后点击「开始扫描」</div>
+            </div>
+        </div>
+
+        <!-- ===================== Quick Test Panel ===================== -->
+        <div class="panel" data-panel="quick">
+            <div class="card">
+                <div class="card-title">快速测试</div>
+                <div class="form-row">
+                    <div class="form-group span-2">
+                        <label>主机</label>
+                        <input type="text" id="quickHost" placeholder="IP 或域名" value="127.0.0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>端口</label>
+                        <input type="number" id="quickPort" placeholder="端口号" min="1" max="65535" value="80">
+                    </div>
+                    <div class="form-group" style="justify-content: flex-end;">
+                        <button class="btn btn-primary" id="quickTestBtn" style="height: 36px;">测试</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-line" id="quick-status">
+                <span class="status-dot"></span>
+                <span class="status-text">未测试</span>
+            </div>
+
+            <div class="log" id="quick-log">
+                <div class="log-empty">尚无数据。点击「测试」后这里会显示测试详情。</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        // ==================== Theme Sync ====================
+        function applyTheme(theme) {
+            if (!theme) return;
+            // 写入多主题核心 data 属性，激活 themes.css 中对应的色板
+            document.documentElement.setAttribute('data-theme', theme.mode || 'dark');
+            document.documentElement.setAttribute('data-theme-name', theme.key || 'one-dark');
+            
+            // 兼容原有的类名逻辑
+            if (theme.mode === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.remove('light-theme');
+            }
+        }
+
+        try {
+            const params = new URLSearchParams(location.search);
+            const mode = params.get('mode');
+            const key = params.get('theme');
+            applyTheme({ mode, key });
+        } catch(e) {}
+
+        ipcRenderer.on('theme:changed', (event, theme) => {
+            applyTheme(theme);
+        });
+
+        // ==================== Common Mappings ====================
+        const PORT_SERVICES = {
+            21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
+            67: 'DHCP', 68: 'DHCP', 69: 'TFTP', 80: 'HTTP', 110: 'POP3',
+            123: 'NTP', 135: 'RPC', 137: 'NetBIOS', 138: 'NetBIOS', 139: 'NetBIOS',
+            143: 'IMAP', 161: 'SNMP', 162: 'SNMP', 443: 'HTTPS', 445: 'SMB',
+            500: 'IKE', 514: 'Syslog', 520: 'RIP', 993: 'IMAPS', 995: 'POP3S',
+            1433: 'MSSQL', 1521: 'Oracle', 1900: 'SSDP', 3306: 'MySQL',
+            3389: 'RDP', 4500: 'IPsec', 5353: 'mDNS', 5432: 'PostgreSQL',
+            5900: 'VNC', 6379: 'Redis', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt',
+            27017: 'MongoDB', 3000: 'Dev Server', 8000: 'Dev Server'
+        };
+
+        // ==================== State ====================
+        let isScanning = false;
+        let scanResults = [];
+        let scannedPorts = new Set();
+        let currentFilter = 'open';
+
+        // ==================== Tabs ====================
+        document.querySelectorAll('.tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                const tab = btn.dataset.tab;
+                document.querySelector(`.panel[data-panel="${tab}"]`).classList.add('active');
+            });
+        });
+
+        // ==================== Presets & Filters ====================
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('portsInput').value = btn.dataset.ports;
+            });
+        });
+
+        document.getElementById('portsInput').addEventListener('input', () => {
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        });
+
+        document.querySelectorAll('.filter-group button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-group button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                renderResults();
+            });
+        });
+
+        // ==================== Scan Engine ====================
+        async function startScan() {
+            const host = document.getElementById('hostInput').value.trim();
+            const ports = document.getElementById('portsInput').value.trim();
+            const protocol = 'TCP';
+            const timeout = parseInt(document.getElementById('timeoutInput').value) || 2000;
+            const concurrency = parseInt(document.getElementById('concurrencyInput').value) || 50;
+
+            if (!host) {
+                alert('请输入目标主机');
+                return;
+            }
+            if (!ports) {
+                alert('请输入端口范围');
+                return;
+            }
+
+            isScanning = true;
+            scanResults = [];
+            scannedPorts.clear();
+            updateUI();
+
+            document.getElementById('resultsEmpty').style.display = 'none';
+            document.getElementById('resultsBody').innerHTML = '';
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('progressText').textContent = '扫描中... 0%';
+            document.getElementById('progressSection').classList.add('show');
+            updateStats();
+
+            try {
+                const results = await ipcRenderer.invoke('scan-ports', {
+                    host, ports, protocol, timeout, concurrency
+                });
+                scanResults = results;
+                scannedPorts = new Set(results.map(r => r.port));
+                updateStats();
+                renderResults();
+            } catch (err) {
+                alert('扫描失败: ' + err.message);
+            }
+
+            isScanning = false;
+            updateUI();
+            document.getElementById('progressSection').classList.remove('show');
+        }
+
+        ipcRenderer.on('scan-progress', (event, { current, total, batchResults }) => {
+            if (!isScanning) return;
+            
+            const percent = Math.round((current / total) * 100);
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = `扫描中... ${current}/${total} (${percent}%)`;
+
+            if (batchResults && Array.isArray(batchResults)) {
+                for (const result of batchResults) {
+                    if (!scannedPorts.has(result.port)) {
+                        scannedPorts.add(result.port);
+                        scanResults.push(result);
+                        appendResultRow(result);
+                    }
+                }
+                updateStats();
+            }
+        });
+
+        function updateStats() {
+            const open = scanResults.filter(r => r.status === 'open').length;
+            const closed = scanResults.filter(r => r.status !== 'open').length;
+
+            document.getElementById('openCount').textContent = open;
+            document.getElementById('closedCount').textContent = closed;
+        }
+
+        function getStatusClass(status) {
+            return status === 'open' ? 'open' : 'closed';
+        }
+
+        function getStatusText(status) {
+            return status === 'open' ? '开放' : '关闭';
+        }
+
+        function renderResults() {
+            const tbody = document.getElementById('resultsBody');
+            const empty = document.getElementById('resultsEmpty');
+            let filtered = scanResults;
+
+            if (currentFilter === 'open') {
+                filtered = scanResults.filter(r => r.status === 'open');
+            } else if (currentFilter === 'closed') {
+                filtered = scanResults.filter(r => r.status !== 'open');
+            }
+
+            filtered.sort((a, b) => a.port - b.port);
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                empty.style.display = '';
+                return;
+            }
+
+            empty.style.display = 'none';
+
+            // 针对大量记录的数据量渲染防卡死优化：仅限制渲染前1000条DOM记录，防止界面挂起
+            if (filtered.length > 1000) {
+                const slice = filtered.slice(0, 1000);
+                tbody.innerHTML = slice.map(r => `
+                    <tr data-port="${r.port}">
+                        <td><strong>${r.port}</strong></td>
+                        <td><span class="status-${getStatusClass(r.status)}">${getStatusText(r.status)}</span></td>
+                        <td>${PORT_SERVICES[r.port] || '-'}</td>
+                    </tr>
+                `).join('') + `<tr><td colspan="3" class="banner-empty" style="font-style: normal; color: var(--warn-color);">数据量过大，当前仅显示前 1000 条记录（开放端口已全部显示）。建议使用上方筛选功能或点击「导出 CSV」查看完整报告。</td></tr>`;
+            } else {
+                tbody.innerHTML = filtered.map(r => `
+                    <tr data-port="${r.port}">
+                        <td><strong>${r.port}</strong></td>
+                        <td><span class="status-${getStatusClass(r.status)}">${getStatusText(r.status)}</span></td>
+                        <td>${PORT_SERVICES[r.port] || '-'}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function appendResultRow(result) {
+            // 扫描进行时，为了绝对防止 DOM 节点过多导致 UI 严重卡顿和重排，在表格中实时追加的仅限于「开放」端口。
+            // 关闭/过滤的端口依然会在后台被统计和记录，并在扫描结束/停止后通过 renderResults 统一渲染。
+            if (result.status !== 'open') return;
+            
+            const tbody = document.getElementById('resultsBody');
+            document.getElementById('resultsEmpty').style.display = 'none';
+            
+            const tr = document.createElement('tr');
+            tr.dataset.port = result.port;
+            tr.innerHTML = `
+                <td><strong>${result.port}</strong></td>
+                <td><span class="status-${getStatusClass(result.status)}">${getStatusText(result.status)}</span></td>
+                <td>${PORT_SERVICES[result.port] || '-'}</td>
+            `;
+            
+            // 针对递增排列的端口名，采用尾向查找进行 O(1) 性能级排序插入
+            const rows = tbody.querySelectorAll('tr');
+            let inserted = false;
+            for (let i = rows.length - 1; i >= 0; i--) {
+                const row = rows[i];
+                const port = parseInt(row.dataset.port);
+                if (port && result.port > port) {
+                    tbody.insertBefore(tr, row.nextSibling);
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) {
+                if (tbody.firstChild) {
+                    tbody.insertBefore(tr, tbody.firstChild);
+                } else {
+                    tbody.appendChild(tr);
+                }
+            }
+        }
+
+        function updateUI() {
+            const scanBtn = document.getElementById('scanBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const exportCsvBtn = document.getElementById('exportCsvBtn');
+
+            if (isScanning) {
+                scanBtn.disabled = true;
+                scanBtn.textContent = '扫描中...';
+                stopBtn.disabled = false;
+                exportCsvBtn.disabled = true;
+            } else {
+                scanBtn.disabled = false;
+                scanBtn.textContent = '开始扫描';
+                stopBtn.disabled = true;
+                exportCsvBtn.disabled = scanResults.length === 0;
+            }
+        }
+
+        async function stopScan() {
+            try {
+                await ipcRenderer.invoke('stop-scan');
+            } catch (e) {
+                console.error('停止扫描失败:', e);
+            }
+            isScanning = false;
+            updateUI();
+            document.getElementById('progressSection').classList.remove('show');
+        }
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            scanResults = [];
+            scannedPorts.clear();
+            updateStats();
+            renderResults();
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('progressText').textContent = '就绪';
+            document.getElementById('progressSection').classList.remove('show');
+            updateUI();
+        });
+
+        // ==================== Export ====================
+        function exportCsv() {
+            if (scanResults.length === 0) {
+                alert('没有扫描结果');
+                return;
+            }
+            
+            const host = document.getElementById('hostInput').value.trim();
+            let csv = '\uFEFF端口,状态,服务\n';
+            
+            const sorted = [...scanResults].sort((a, b) => a.port - b.port);
+            for (const r of sorted) {
+                const status = r.status === 'open' ? '开放' : '关闭';
+                const service = PORT_SERVICES[r.port] || '';
+                csv += `${r.port},${status},${service}\n`;
+            }
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `port-scan-${host}-${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+
+        // ==================== Quick Test Helpers ====================
+        function escHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // ==================== Quick Test Engine ====================
+        function fmtTime() {
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+        }
+
+        function appendQuickLog(kind, content) {
+            const container = document.getElementById('quick-log');
+            const empty = container.querySelector('.log-empty');
+            if (empty) empty.remove();
+
+            const line = document.createElement('div');
+            line.className = 'log-line ' + kind;
+
+            const tagText = kind === 'in' ? '通' : kind === 'out' ? '测' : kind === 'err' ? '断' : '系';
+            line.innerHTML = `
+                <span class="ts">${fmtTime()}</span>
+                <span class="tag">${tagText}</span>
+                <span class="body">${escHtml(content)}</span>
+            `;
+            container.appendChild(line);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function setQuickStatus(kind, text) {
+            const el = document.getElementById('quick-status');
+            const dot = el.querySelector('.status-dot');
+            const txt = el.querySelector('.status-text');
+            dot.className = 'status-dot ' + (kind || '');
+            txt.textContent = text;
+        }
+
+        async function quickTest() {
+            const host = document.getElementById('quickHost').value.trim();
+            const port = document.getElementById('quickPort').value.trim();
+            const protocol = 'TCP';
+
+            if (!host || !port) {
+                alert('请输入主机和端口');
+                return;
+            }
+
+            const btn = document.getElementById('quickTestBtn');
+            btn.disabled = true;
+            btn.textContent = '测试中...';
+
+            setQuickStatus('connecting', `正在测试 ${host}:${port}...`);
+            appendQuickLog('sys', `开始测试目标 ${host}:${port}...`);
+
+            try {
+                const result = await ipcRenderer.invoke('quick-test', {
+                    host, port, protocol, timeout: 3000
+                });
+
+                if (result.error) {
+                    setQuickStatus('error', `错误: ${result.error}`);
+                    appendQuickLog('err', `测试失败: ${result.error}`);
+                } else if (result.status === 'open') {
+                    const service = PORT_SERVICES[result.port] ? ` [${PORT_SERVICES[result.port]}]` : '';
+                    setQuickStatus('online', `${host}:${port} 开放${service}`);
+                    appendQuickLog('in', `${host}:${port} 连接成功，端口处于开放状态${service}`);
+                } else {
+                    setQuickStatus('error', `${host}:${port} 关闭`);
+                    appendQuickLog('err', `${host}:${port} 连接失败，端口处于关闭或被过滤状态`);
+                }
+            } catch (err) {
+                setQuickStatus('error', `测试失败: ${err.message}`);
+                appendQuickLog('err', `测试异常: ${err.message}`);
+            }
+
+            btn.disabled = false;
+            btn.textContent = '测试';
+        }
+
+        // ==================== Bind Explicit Event Listeners ====================
+        document.getElementById('scanBtn').addEventListener('click', startScan);
+        document.getElementById('stopBtn').addEventListener('click', stopScan);
+        document.getElementById('quickTestBtn').addEventListener('click', quickTest);
+    </script>
+</body>
+</html>

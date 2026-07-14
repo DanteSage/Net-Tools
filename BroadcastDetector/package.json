@@ -1,0 +1,6 @@
+{
+  "name": "broadcast-detector",
+  "version": "1.0.0",
+  "main": "index.html",
+  "description": "Broadcast and loop detection tool"
+}

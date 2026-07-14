@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>内网测速</title>
+    <link rel="stylesheet" href="/styles/components/themes.css">
+    <script src="speedtest.js"></script>
+    <script>
+        try {
+            const params = new URLSearchParams(location.search);
+            const _m = params.get('mode');
+            const _t = params.get('theme');
+            if (_m === 'light') document.documentElement.classList.add('light-theme');
+            if (_m) document.documentElement.setAttribute('data-theme', _m);
+            if (_t) document.documentElement.setAttribute('data-theme-name', _t);
+        } catch(e) {}
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+    :root {
+            /* 全面映射系统主题配色变量，保持优雅回退默认值 */
+            --bg-start: var(--bg-primary, #1a1a2e);
+            --bg-end: var(--bg-secondary, #16213e);
+            --text: var(--text-primary, #ffffff);
+            --text-muted: var(--text-muted, #888888);
+            --text-soft: var(--text-secondary, #aaaaaa);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.05));
+            --card-border: var(--border-color, rgba(255, 255, 255, 0.1));
+            --btn-primary-bg: var(--primary-color, #00d4ff);
+            --btn-primary-hover: var(--primary-hover, #0099cc);
+            --btn-sec-bg: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
+            --btn-sec-border: var(--border-light, rgba(255, 255, 255, 0.1));
+            --latency-color: #ffaa00;
+            --jitter-color: #ff66cc;
+            --download-color: #00d4ff;
+            --upload-color: #00ff88;
+        }
+
+        :root.light-theme {
+            --bg-start: var(--bg-primary, #f5f7fa);
+            --bg-end: var(--bg-secondary, #e4e8ed);
+            --text: var(--text-primary, #1a1a2e);
+            --text-muted: var(--text-muted, #666666);
+            --text-soft: var(--text-secondary, #555555);
+            --card-bg: var(--bg-card, rgba(255, 255, 255, 0.9));
+            --card-border: var(--border-color, rgba(0, 0, 0, 0.1));
+            --btn-primary-bg: var(--primary-color, #2563eb);
+            --btn-primary-hover: var(--primary-hover, #1d4ed8);
+            --btn-sec-bg: var(--bg-tertiary, rgba(0, 0, 0, 0.05));
+            --btn-sec-border: var(--border-light, rgba(0, 0, 0, 0.15));
+            --latency-color: #d97706;
+            --jitter-color: #db2777;
+            --download-color: #2563eb;
+            --upload-color: #16a34a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-start) 0%, var(--bg-end) 100%);
+            min-height: 100vh;
+            color: var(--text);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 40px;
+            font-weight: 300;
+        }
+
+        .speed-panel {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--card-border);
+        }
+
+        .localhost-warning {
+            background: rgba(255, 170, 0, 0.15);
+            border: 1px solid rgba(255, 170, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            color: var(--warning-color, #ffaa00);
+            font-size: 0.85rem;
+            text-align: center;
+            display: none;
+        }
+
+        .localhost-warning.show {
+            display: block;
+        }
+
+        /* 延迟抖动区域 */
+        .ping-display {
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            margin-bottom: 30px;
+        }
+
+        .ping-item {
+            text-align: center;
+        }
+
+        .ping-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .ping-value.latency { color: var(--latency-color); }
+        .ping-value.jitter { color: var(--jitter-color); }
+
+        .ping-unit {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .ping-label {
+            font-size: 0.8rem;
+            color: var(--text-soft);
+            margin-top: 5px;
+        }
+
+        /* 速度显示区域 */
+        .speed-display {
+            display: flex;
+            justify-content: center;
+            gap: 80px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .speed-item {
+            text-align: center;
+        }
+
+        .speed-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .speed-value.download { color: var(--download-color); }
+        .speed-value.upload { color: var(--upload-color); }
+
+        .speed-unit {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .speed-label {
+            font-size: 0.85rem;
+            color: var(--text-soft);
+            margin-top: 5px;
+        }
+
+        .btn {
+            display: block;
+            width: 200px;
+            margin: 0 auto;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #ffffff;
+            background: var(--btn-primary-bg);
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: var(--btn-primary-hover);
+            box-shadow: 0 10px 30px rgba(var(--primary-rgb, 0, 212, 255), 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn.abort {
+            background: var(--danger-color, #ff5555);
+        }
+
+        .btn.abort:hover:not(:disabled) {
+            background: var(--danger-hover, #ff3333);
+            filter: brightness(0.9);
+            box-shadow: 0 10px 30px rgba(255, 85, 85, 0.2);
+        }
+
+        .status {
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+
+        .ip-info {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-top: 10px;
+        }
+
+        .records-panel {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--card-border);
+        }
+
+        .records-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .records-header h2 {
+            font-size: 1.2rem;
+            font-weight: 400;
+        }
+
+        .clear-btn {
+            padding: 8px 16px;
+            font-size: 0.85rem;
+            background: rgba(255, 85, 85, 0.1);
+            color: var(--danger-color, #ff5555);
+            border: 1px solid var(--danger-color, rgba(255, 85, 85, 0.2));
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .clear-btn:hover {
+            background: var(--danger-color, #ff5555);
+            color: #ffffff;
+        }
+
+        .records-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .record-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            background: var(--btn-sec-bg);
+            border-radius: 10px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 10px;
+            border: 1px solid var(--card-border);
+        }
+
+        .record-time {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .record-speeds {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .record-speed {
+            font-size: 0.85rem;
+        }
+
+        .record-speed.download { color: var(--download-color); }
+        .record-speed.upload { color: var(--upload-color); }
+        .record-speed.latency { color: var(--latency-color); }
+        .record-speed.jitter { color: var(--jitter-color); }
+
+        .no-records {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 30px;
+        }
+
+        @media (max-width: 500px) {
+            .speed-display { gap: 40px; }
+            .speed-value { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>内网测速</h1>
+
+        <div class="speed-panel">
+            <div class="localhost-warning" id="localhostWarning">
+                ⚠️ 本机测试走回环接口，结果不代表实际网络速度。请从其他设备访问测试。
+            </div>
+
+            <!-- 延迟和抖动 -->
+            <div class="ping-display">
+                <div class="ping-item">
+                    <div class="ping-value latency" id="pingValue">-</div>
+                    <div class="ping-unit">ms</div>
+                    <div class="ping-label">延迟</div>
+                </div>
+                <div class="ping-item">
+                    <div class="ping-value jitter" id="jitterValue">-</div>
+                    <div class="ping-unit">ms</div>
+                    <div class="ping-label">抖动</div>
+                </div>
+            </div>
+
+            <!-- 速度显示 -->
+            <div class="speed-display">
+                <div class="speed-item">
+                    <div class="speed-value download" id="dlValue">-</div>
+                    <div class="speed-unit">Mbps</div>
+                    <div class="speed-label">↓ 下载速度</div>
+                </div>
+                <div class="speed-item">
+                    <div class="speed-value upload" id="ulValue">-</div>
+                    <div class="speed-unit">Mbps</div>
+                    <div class="speed-label">↑ 上传速度</div>
+                </div>
+            </div>
+
+            <button class="btn" id="startBtn" onclick="startStop()">开始测速</button>
+            <div class="status" id="status">点击按钮开始测速</div>
+            <div class="ip-info" id="ipInfo"></div>
+        </div>
+
+        <div class="records-panel">
+            <div class="records-header">
+                <h2>测速记录</h2>
+                <button class="clear-btn" onclick="clearRecords()">清空记录</button>
+            </div>
+            <div class="records-list" id="recordsList">
+                <div class="no-records">暂无测速记录</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 检测是否本机访问
+        var isLocalhost = location.hostname === 'localhost' || 
+                          location.hostname === '127.0.0.1' ||
+                          location.hostname === '::1';
+        
+        if (isLocalhost) {
+            document.getElementById('localhostWarning').classList.add('show');
+        }
+
+        // 初始化 LibreSpeed
+        var speedtest = new Speedtest();
+        var isRunning = false;
+
+        function startStop() {
+            if (isRunning) {
+                speedtest.abort();
+                isRunning = false;
+            } else {
+                // 重新初始化
+                speedtest = new Speedtest();
+                speedtest.setParameter('url_dl', 'backend/garbage.php');
+                speedtest.setParameter('url_ul', 'backend/empty.php');
+                speedtest.setParameter('url_ping', 'backend/empty.php');
+                speedtest.setParameter('url_getIp', 'backend/getIP.php');
+                speedtest.setParameter('test_order', 'IP_D_U_P');
+                speedtest.setParameter('time_dl_max', 10);
+                speedtest.setParameter('time_ul_max', 10);
+                speedtest.setParameter('count_ping', 20);
+
+                speedtest.onupdate = function(data) {
+                    document.getElementById('pingValue').textContent = data.pingStatus || '-';
+                    document.getElementById('jitterValue').textContent = data.jitterStatus || '-';
+                    document.getElementById('dlValue').textContent = data.dlStatus || '-';
+                    document.getElementById('ulValue').textContent = data.ulStatus || '-';
+                    
+                    if (data.clientIp) {
+                        document.getElementById('ipInfo').textContent = '本机IP: ' + data.clientIp;
+                    }
+
+                    var statusText = '';
+                    switch(data.testState) {
+                        case 0: statusText = '准备中...'; break;
+                        case 1: statusText = '测试下载速度...'; break;
+                        case 2: statusText = '测试延迟和抖动...'; break;
+                        case 3: statusText = '测试上传速度...'; break;
+                        case 4: statusText = '测速完成'; break;
+                        case 5: statusText = '测试已中止'; break;
+                    }
+                    document.getElementById('status').textContent = statusText;
+                };
+
+                speedtest.onend = function(aborted) {
+                    isRunning = false;
+                    var btn = document.getElementById('startBtn');
+                    btn.textContent = '开始测速';
+                    btn.classList.remove('abort');
+                    
+                    if (!aborted) {
+                        saveRecord();
+                    }
+                };
+
+                // 重置显示
+                document.getElementById('pingValue').textContent = '-';
+                document.getElementById('jitterValue').textContent = '-';
+                document.getElementById('dlValue').textContent = '-';
+                document.getElementById('ulValue').textContent = '-';
+                document.getElementById('ipInfo').textContent = '';
+
+                speedtest.start();
+                isRunning = true;
+                
+                var btn = document.getElementById('startBtn');
+                btn.textContent = '停止测速';
+                btn.classList.add('abort');
+            }
+        }
+
+        // 保存测速记录
+        async function saveRecord() {
+            var ping = document.getElementById('pingValue').textContent;
+            var jitter = document.getElementById('jitterValue').textContent;
+            var dl = document.getElementById('dlValue').textContent;
+            var ul = document.getElementById('ulValue').textContent;
+
+            if (dl === '-' && ul === '-') return;
+
+            try {
+                await fetch('/api/records', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        latency: ping,
+                        jitter: jitter,
+                        downloadSpeed: dl,
+                        uploadSpeed: ul
+                    })
+                });
+                loadRecords();
+            } catch (error) {
+                console.error('保存记录失败:', error);
+            }
+        }
+
+        // 加载测速记录
+        async function loadRecords() {
+            try {
+                var response = await fetch('/api/records');
+                var records = await response.json();
+                renderRecords(records);
+            } catch (error) {
+                console.error('加载记录失败:', error);
+            }
+        }
+
+        // 渲染记录列表
+        function renderRecords(records) {
+            var container = document.getElementById('recordsList');
+            
+            if (records.length === 0) {
+                container.innerHTML = '<div class="no-records">暂无测速记录</div>';
+                return;
+            }
+            
+            container.innerHTML = records.reverse().map(function(record) {
+                return '<div class="record-item">' +
+                    '<div class="record-time">' + record.timestamp + '</div>' +
+                    '<div class="record-speeds">' +
+                        '<span class="record-speed latency">' + (record.latency || '-') + ' ms</span>' +
+                        '<span class="record-speed jitter">' + (record.jitter || '-') + ' ms</span>' +
+                        '<span class="record-speed download">↓ ' + record.downloadSpeed + ' Mbps</span>' +
+                        '<span class="record-speed upload">↑ ' + record.uploadSpeed + ' Mbps</span>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        // 清空记录
+        async function clearRecords() {
+            if (!confirm('确定要清空所有测速记录吗？')) return;
+            
+            try {
+                await fetch('/api/records', { method: 'DELETE' });
+                loadRecords();
+            } catch (error) {
+                console.error('清空记录失败:', error);
+            }
+        }
+
+        // 页面加载时获取记录
+        document.addEventListener('DOMContentLoaded', loadRecords);
+    </script>
+</body>
+</html>

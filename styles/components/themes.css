@@ -1,0 +1,283 @@
+/**
+ * 多主题包 - 参考 VS Code 经典与流行社区主题
+ *
+ * 双属性策略：
+ *  - data-theme="light"          —— 决定是浅色基底（沿用现有 188 处样式调整）
+ *  - data-theme-name="<key>"     —— 决定具体主题色板（覆盖核心 CSS 变量）
+ *
+ * 默认深色（data-theme-name 缺省）继承 base.css 的根变量，不需覆盖。
+ *
+ * 仅覆盖核心配色变量，其它语义变量（radius/shadow/transition）保持一致。
+ */
+
+/* ==================== 深色系 ==================== */
+
+/* Dark+ (默认深色) */
+[data-theme-name="dark"] {
+    --primary-color: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-light: rgba(59, 130, 246, 0.15);
+    --primary-rgb: 59, 130, 246;
+    --primary: #3b82f6;
+
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #334155;
+    --bg-card: #1e293b;
+
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    --border-color: #334155;
+    --border-light: #475569;
+
+    --terminal-bg: #0d1117;
+    --terminal-fg: #e6edf3;
+}
+
+/* One Dark Pro */
+[data-theme-name="one-dark"] {
+    --primary-color: #61afef;
+    --primary-hover: #4d96d6;
+    --primary-light: rgba(97, 175, 239, 0.15);
+    --primary-rgb: 97, 175, 239;
+    --primary: #61afef;
+
+    --bg-primary: #282c34;
+    --bg-secondary: #21252b;
+    --bg-tertiary: #2c313a;
+    --bg-card: #21252b;
+
+    --text-primary: #abb2bf;
+    --text-secondary: #9da5b4;
+    --text-muted: #5c6370;
+
+    --border-color: #3e4451;
+    --border-light: #4b5263;
+
+    --terminal-bg: #282c34;
+    --terminal-fg: #abb2bf;
+}
+
+/* Monokai */
+[data-theme-name="monokai"] {
+    --primary-color: #66d9ef;
+    --primary-hover: #4fc3da;
+    --primary-light: rgba(102, 217, 239, 0.15);
+    --primary-rgb: 102, 217, 239;
+    --primary: #66d9ef;
+
+    --bg-primary: #272822;
+    --bg-secondary: #1e1f1c;
+    --bg-tertiary: #3e3d32;
+    --bg-card: #1e1f1c;
+
+    --text-primary: #f8f8f2;
+    --text-secondary: #cfcfc2;
+    --text-muted: #75715e;
+
+    --border-color: #3e3d32;
+    --border-light: #49483e;
+
+    --success-color: #a6e22e;
+    --warning-color: #fd971f;
+    --danger-color: #f92672;
+
+    --terminal-bg: #272822;
+    --terminal-fg: #f8f8f2;
+}
+
+/* Dracula */
+[data-theme-name="dracula"] {
+    --primary-color: #bd93f9;
+    --primary-hover: #a87dec;
+    --primary-light: rgba(189, 147, 249, 0.18);
+    --primary-rgb: 189, 147, 249;
+    --primary: #bd93f9;
+
+    --bg-primary: #282a36;
+    --bg-secondary: #21222c;
+    --bg-tertiary: #343746;
+    --bg-card: #21222c;
+
+    --text-primary: #f8f8f2;
+    --text-secondary: #bfbfbf;
+    --text-muted: #6272a4;
+
+    --border-color: #44475a;
+    --border-light: #565f89;
+
+    --success-color: #50fa7b;
+    --warning-color: #f1fa8c;
+    --danger-color: #ff5555;
+    --info-color: #8be9fd;
+
+    --terminal-bg: #282a36;
+    --terminal-fg: #f8f8f2;
+}
+
+/* Solarized Dark */
+[data-theme-name="solarized-dark"] {
+    --primary-color: #268bd2;
+    --primary-hover: #1f6fa8;
+    --primary-light: rgba(38, 139, 210, 0.18);
+    --primary-rgb: 38, 139, 210;
+    --primary: #268bd2;
+
+    --bg-primary: #002b36;
+    --bg-secondary: #073642;
+    --bg-tertiary: #0c4a59;
+    --bg-card: #073642;
+
+    --text-primary: #eee8d5;
+    --text-secondary: #93a1a1;
+    --text-muted: #586e75;
+
+    --border-color: #0e5263;
+    --border-light: #176680;
+
+    --success-color: #859900;
+    --warning-color: #b58900;
+    --danger-color: #dc322f;
+    --info-color: #2aa198;
+
+    --terminal-bg: #002b36;
+    --terminal-fg: #eee8d5;
+}
+
+/* GitHub Dark */
+[data-theme-name="github-dark"] {
+    --primary-color: #58a6ff;
+    --primary-hover: #1f6feb;
+    --primary-light: rgba(88, 166, 255, 0.15);
+    --primary-rgb: 88, 166, 255;
+    --primary: #58a6ff;
+
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --bg-card: #161b22;
+
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+
+    --border-color: #30363d;
+    --border-light: #484f58;
+
+    --terminal-bg: #0d1117;
+    --terminal-fg: #e6edf3;
+}
+
+/* ==================== 浅色系 ==================== */
+/* 这些主题必须同时设置 data-theme="light"，以激活现有 188 处浅色样式调整 */
+
+/* Light+ (默认浅色) */
+[data-theme-name="light"] {
+    --primary-color: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-light: #eff6ff;
+    --primary-rgb: 59, 130, 246;
+    --primary: #3b82f6;
+
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f1f5f9;
+    --bg-card: #ffffff;
+
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+
+    --border-color: #e2e8f0;
+    --border-light: #cbd5e1;
+
+    --terminal-bg: #fafbfc;
+    --terminal-fg: #24292f;
+}
+
+/* GitHub Light */
+[data-theme-name="github-light"] {
+    --primary-color: #0969da;
+    --primary-hover: #0860c7;
+    --primary-light: #ddf4ff;
+    --primary-rgb: 9, 105, 218;
+    --primary: #0969da;
+
+    --bg-primary: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eaeef2;
+    --bg-card: #ffffff;
+
+    --text-primary: #1f2328;
+    --text-secondary: #656d76;
+    --text-muted: #8c959f;
+
+    --border-color: #d0d7de;
+    --border-light: #afb8c1;
+
+    --terminal-bg: #ffffff;
+    --terminal-fg: #1f2328;
+}
+
+/* Solarized Light */
+[data-theme-name="solarized-light"] {
+    --primary-color: #268bd2;
+    --primary-hover: #1f6fa8;
+    --primary-light: rgba(38, 139, 210, 0.15);
+    --primary-rgb: 38, 139, 210;
+    --primary: #268bd2;
+
+    --bg-primary: #fdf6e3;
+    --bg-secondary: #eee8d5;
+    --bg-tertiary: #e3dcc4;
+    --bg-card: #fdf6e3;
+
+    --text-primary: #073642;
+    --text-secondary: #586e75;
+    --text-muted: #93a1a1;
+
+    --border-color: #d6cfb8;
+    --border-light: #b8b095;
+
+    --success-color: #859900;
+    --warning-color: #b58900;
+    --danger-color: #dc322f;
+    --info-color: #2aa198;
+
+    --terminal-bg: #fdf6e3;
+    --terminal-fg: #586e75;
+}
+
+/* Quiet Light (柔和米色) */
+[data-theme-name="quiet-light"] {
+    --primary-color: #4f76b1;
+    --primary-hover: #3e639a;
+    --primary-light: rgba(79, 118, 177, 0.12);
+    --primary-rgb: 79, 118, 177;
+    --primary: #4f76b1;
+
+    --bg-primary: #f5f5f5;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #ececec;
+    --bg-card: #ffffff;
+
+    --text-primary: #333333;
+    --text-secondary: #555555;
+    --text-muted: #888888;
+
+    --border-color: #e0e0e0;
+    --border-light: #c8c8c8;
+
+    --terminal-bg: #f5f5f5;
+    --terminal-fg: #333333;
+}
+
+/* ==================== 全局通用组件主题适配 ==================== */
+
+/* 统一重写原生下拉框 Option 背景与文本颜色，防止在 Windows Electron 下出现低对比度（白字灰底）的问题 */
+select option {
+    background-color: var(--bg-secondary, var(--bg-primary, #1e1f2c)) !important;
+    color: var(--text-primary, #ffffff) !important;
+}

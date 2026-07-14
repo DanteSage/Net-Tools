@@ -1,0 +1,40 @@
+{
+  "name": "packet-capture",
+  "version": "1.0.0",
+  "description": "基于 WinDivert 的网络抓包工具",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "author": "PacketCapture",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "build": {
+    "appId": "com.packetcapture.app",
+    "productName": "PacketCapture",
+    "win": {
+      "target": "portable",
+      "icon": "src/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "PacketCapture-Portable.exe"
+    },
+    "extraResources": [
+      {
+        "from": "lib/",
+        "to": "lib/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  }
+}
