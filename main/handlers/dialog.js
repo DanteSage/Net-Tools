@@ -4,6 +4,11 @@
 const fs = require('fs');
 const { ipcMain, dialog, shell } = require('electron');
 const { paths, getBackupDir, getOplogDir } = require('../config');
+const { normalizeExternalUrl, normalizeOpenPath } = require('../utils/shell-validation');
+
+function getAllowedOpenDirectories() {
+    return [paths.config, getBackupDir(), getOplogDir()];
+}
 
 /**
  * 注册对话框和文件系统相关 IPC 处理程序
@@ -112,12 +117,14 @@ function registerDialogHandlers(context) {
 
     // Shell 操作 - 打开路径
     ipcMain.handle('shell:openPath', async (event, filePath) => {
-        return shell.openPath(filePath);
+        const safePath = normalizeOpenPath(filePath, getAllowedOpenDirectories());
+        return shell.openPath(safePath);
     });
 
     // Shell 操作 - 打开外部链接
     ipcMain.handle('shell:openExternal', async (event, url) => {
-        return shell.openExternal(url);
+        const safeUrl = normalizeExternalUrl(url);
+        return shell.openExternal(safeUrl);
     });
 
     // 获取应用路径信息

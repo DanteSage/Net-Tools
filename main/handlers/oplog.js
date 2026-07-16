@@ -10,6 +10,7 @@ const {
     getOplogSaveMd, setOplogSaveMd,
     ensureDirectories 
 } = require('../config');
+const { normalizeOpenPath } = require('../utils/shell-validation');
 
 /**
  * 生成操作日志的 TXT 内容
@@ -293,7 +294,9 @@ function registerOplogHandlers(context) {
 
     // 打开操作日志目录
     ipcMain.handle('oplog:openDir', async () => {
-        return shell.openPath(getOplogDir());
+        const oplogDir = getOplogDir();
+        const safePath = normalizeOpenPath(oplogDir, [oplogDir]);
+        return shell.openPath(safePath);
     });
 }
 
