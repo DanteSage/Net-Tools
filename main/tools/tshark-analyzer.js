@@ -3,20 +3,20 @@
  * @module tshark-analyzer
  */
 const path = require('path');
-const { spawn, exec } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const { ipcMain, dialog, BrowserWindow, app, safeStorage } = require('electron');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const { createToolWindow } = require('../utils/toolWindow');
+const {
+    validateCustomTsharkPath,
+    checkTsharkVersion,
+    findTshark,
+    getTsharkInterfaces
+} = require('../utils/tshark-executable');
 
 // ==================== 常量定义 ====================
-
-const TSHARK_SEARCH_PATHS = [
-    'tshark',
-    'C:\\Program Files\\Wireshark\\tshark.exe',
-    'C:\\Program Files (x86)\\Wireshark\\tshark.exe'
-];
 
 const TSHARK_FIELDS = [
     '-e', 'frame.time_epoch',
@@ -212,51 +212,18 @@ function _killProcess(proc) {
     if (!proc) return;
     try {
         if (process.platform === 'win32' && proc.pid) {
-            exec(`taskkill /F /T /PID ${proc.pid}`, () => {});
+            execFile(
+                'taskkill.exe',
+                ['/F', '/T', '/PID', String(proc.pid)],
+                { windowsHide: true, shell: false },
+                () => {}
+            );
         }
         proc.kill();
     } catch (_) {}
 }
 
 // ==================== 私有函数 ====================
-
-/**
- * 查找 tshark 可执行文件路径
- * @private
- */
-async function _findTshark() {
-    for (const p of TSHARK_SEARCH_PATHS) {
-        try {
-            await new Promise((resolve, reject) => {
-                exec(`"${p}" --version`, { timeout: 3000 }, (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-            return p;
-        } catch {}
-    }
-    return null;
-}
-
-/**
- * 获取网络接口列表
- * @private
- */
-async function _getInterfaces(tshark) {
-    return new Promise((resolve) => {
-        exec(`"${tshark}" -D 2>&1`, { timeout: 5000 }, (err, stdout) => {
-            if (!stdout) { resolve([]); return; }
-            const lines = stdout.split('\n').filter(l => l.trim());
-            const interfaces = lines.map(line => {
-                const m = line.match(/^(\d+)\.\s+(.+?)(?:\s+\((.+)\))?\s*$/);
-                if (!m) return null;
-                return { index: parseInt(m[1]), name: m[2].trim(), description: (m[3] || m[2]).trim() };
-            }).filter(Boolean);
-            resolve(interfaces);
-        });
-    });
-}
 
 /**
  * 解析 tshark -T ek 单行输出为数据包对象
@@ -1017,20 +984,22 @@ function registerTsharkAnalyzerHandlers(context) {
     });
 
     ipcMain.handle('tshark:checkVersion', async (event, customPath) => {
-        const targetPath = customPath || cachedTsharkPath || await _findTshark();
+        let targetPath;
+        if (typeof customPath === 'string' && customPath.trim()) {
+            try {
+                targetPath = validateCustomTsharkPath(customPath);
+            } catch (error) {
+                return { found: false, version: null, path: null, error: error.message };
+            }
+        } else if (customPath !== undefined && customPath !== null) {
+            return { found: false, version: null, path: null, error: 'TShark 路径无效' };
+        } else {
+            targetPath = cachedTsharkPath || await findTshark();
+        }
         if (!targetPath) return { found: false, version: null, path: null, error: '未找到 tshark，请安装 Wireshark' };
-        return new Promise((resolve) => {
-            exec(`"${targetPath}" --version`, { timeout: 4000 }, (err, stdout) => {
-                if (err) {
-                    resolve({ found: false, version: null, path: targetPath, error: err.message });
-                    return;
-                }
-                const m = stdout.match(/TShark[^\d]*(\d+\.\d+\.\d+)/i);
-                const version = m ? m[1] : stdout.split('\n')[0].trim();
-                cachedTsharkPath = targetPath;
-                resolve({ found: true, version, path: targetPath });
-            });
-        });
+        const result = await checkTsharkVersion(targetPath);
+        if (result.found) cachedTsharkPath = targetPath;
+        return result;
     });
 
     ipcMain.handle('tshark:browseTshark', async () => {
@@ -1049,14 +1018,14 @@ function registerTsharkAnalyzerHandlers(context) {
     });
 
     ipcMain.handle('tshark:getInterfaces', async () => {
-        if (!cachedTsharkPath) cachedTsharkPath = await _findTshark();
+        if (!cachedTsharkPath) cachedTsharkPath = await findTshark();
         if (!cachedTsharkPath) return { success: false, error: '未找到 tshark，请安装 Wireshark 并将其加入系统 PATH' };
-        const interfaces = await _getInterfaces(cachedTsharkPath);
+        const interfaces = await getTsharkInterfaces(cachedTsharkPath);
         return { success: true, interfaces };
     });
 
     ipcMain.handle('tshark:start', async (event, options) => {
-        if (!cachedTsharkPath) cachedTsharkPath = await _findTshark();
+        if (!cachedTsharkPath) cachedTsharkPath = await findTshark();
         if (!cachedTsharkPath) return { success: false, error: '未找到 tshark，请先安装 Wireshark' };
 
         if (captureProcess) { const old = captureProcess; captureProcess = null; _killProcess(old); }
@@ -1151,7 +1120,7 @@ function registerTsharkAnalyzerHandlers(context) {
         });
         if (result.canceled || !result.filePaths.length) return { success: false, error: '取消' };
 
-        if (!cachedTsharkPath) cachedTsharkPath = await _findTshark();
+        if (!cachedTsharkPath) cachedTsharkPath = await findTshark();
         if (!cachedTsharkPath) return { success: false, error: '未找到 tshark' };
 
         packetCounter = 0;
