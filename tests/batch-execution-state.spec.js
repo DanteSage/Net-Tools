@@ -1,5 +1,12 @@
 const { test, expect } = require('@playwright/test');
+const path = require('path');
 const { registerBatchHandlers } = require('../main/batch');
+const {
+    MAX_BACKUP_NAME_LENGTH,
+    sanitizeBackupFileStem,
+    resolveBackupFilePath,
+    writeUniqueBackupFile
+} = require('../main/batch/backup-file');
 
 class FakeIpcMain {
     constructor() {
@@ -32,7 +39,7 @@ function successResult(target) {
     };
 }
 
-function createHarness(executeTarget, messages = []) {
+function createHarness(executeTarget, messages = [], dependencies = {}) {
     const ipcMain = new FakeIpcMain();
     const mainWindow = {
         isDestroyed: () => false,
@@ -43,7 +50,7 @@ function createHarness(executeTarget, messages = []) {
     registerBatchHandlers({
         getMainWindow: () => mainWindow,
         isQuitting: () => false
-    }, { ipcMain, executeTarget });
+    }, { ...dependencies, ipcMain, executeTarget });
     return ipcMain.handlers;
 }
 
@@ -134,5 +141,148 @@ test.describe('batch execution state', () => {
                 })
             }
         ]);
+    });
+});
+
+test.describe('batch backup files', () => {
+    test('sanitizes unsafe and Windows-reserved target names', () => {
+        expect(sanitizeBackupFileStem('../../outside\\router')).toBe('outside_router');
+        expect(sanitizeBackupFileStem('2001:db8::1')).toBe('2001_db8_1');
+        expect(sanitizeBackupFileStem('CON')).toBe('_CON');
+        expect(sanitizeBackupFileStem(' . . ')).toBe('unknown-target');
+        expect(sanitizeBackupFileStem('设备 核心交换机')).toBe('设备 核心交换机');
+        expect(sanitizeBackupFileStem('x'.repeat(500))).toHaveLength(MAX_BACKUP_NAME_LENGTH);
+        const emojiName = sanitizeBackupFileStem('😀'.repeat(500));
+        expect(emojiName.length).toBeLessThanOrEqual(MAX_BACKUP_NAME_LENGTH);
+        expect(emojiName.endsWith('\ud83d')).toBe(false);
+    });
+
+    test('rejects any final backup path outside the configured directory', () => {
+        const backupDir = path.resolve('test-backups');
+        expect(resolveBackupFilePath(backupDir, 'router.txt'))
+            .toBe(path.join(backupDir, 'router.txt'));
+        expect(() => resolveBackupFilePath(backupDir, '../escape.txt')).toThrow();
+        expect(() => resolveBackupFilePath(backupDir, '..\\escape.txt')).toThrow();
+    });
+
+    test('uses exclusive async writes and retries existing file names', async () => {
+        const calls = [];
+        const writeFile = async (filePath, content, options) => {
+            calls.push({ filePath, content, options });
+            if (calls.length === 1) {
+                throw Object.assign(new Error('already exists'), { code: 'EEXIST' });
+            }
+        };
+
+        const result = await writeUniqueBackupFile({
+            backupDir: path.resolve('test-backups'),
+            targetName: 'router',
+            timestamp: '2026-07-16T12-00-00-000Z',
+            content: 'configuration',
+            writeFile
+        });
+
+        expect(calls).toHaveLength(2);
+        expect(calls[0].options).toEqual({ encoding: 'utf8', flag: 'wx' });
+        expect(result.fileName).toMatch(/_2\.txt$/);
+        expect(result.filePath).toBe(calls[1].filePath);
+    });
+
+    test('writes sanitized batch backups asynchronously without path collisions', async () => {
+        const backupDir = path.resolve('test-backups');
+        const writeStarted = createDeferred();
+        const releaseWrite = createDeferred();
+        const writes = [];
+        const fsModule = {
+            writeFileSync: () => {
+                throw new Error('synchronous write must not be used');
+            },
+            promises: {
+                writeFile: async (filePath, content, options) => {
+                    writes.push({ filePath, content, options });
+                    if (writes.length === 1) {
+                        writeStarted.resolve();
+                        await releaseWrite.promise;
+                    }
+                }
+            }
+        };
+        const handlers = createHarness(async (target) => ({
+            ...successResult(target),
+            output: '\x1b[31mok\x1b[0m\r\n\r\n'
+        }), [], {
+            fs: fsModule,
+            getBackupDir: () => backupDir
+        });
+        const targets = [
+            { name: '../../outside\\router', host: '192.0.2.30', type: 'cisco' },
+            { name: '../../outside/router', host: '192.0.2.31', type: 'cisco' },
+            { host: '2001:db8::1', type: 'cisco' },
+            { name: 'CON', host: '192.0.2.32', type: 'cisco' }
+        ];
+        let completed = false;
+        const run = handlers.get('batch:execute')({}, {
+            targets,
+            commands: ['show running-config'],
+            options: { parallel: false, saveBackup: true }
+        }).then((result) => {
+            completed = true;
+            return result;
+        });
+
+        await writeStarted.promise;
+        expect(completed).toBe(false);
+        releaseWrite.resolve();
+        await expect(run).resolves.toMatchObject({ success: true });
+
+        expect(writes).toHaveLength(targets.length);
+        const fileNames = writes.map(write => path.basename(write.filePath));
+        expect(new Set(fileNames.map(fileName => fileName.toLowerCase())).size).toBe(targets.length);
+        for (const write of writes) {
+            expect(path.dirname(write.filePath)).toBe(backupDir);
+            expect(path.basename(write.filePath)).not.toMatch(/[<>:"/\\|?*\u0000-\u001f]/);
+            expect(path.basename(write.filePath)).not.toContain('..');
+            expect(write.content).toBe('ok');
+            expect(write.options).toEqual({ encoding: 'utf8', flag: 'wx' });
+        }
+    });
+
+    test('continues saving later targets when one async backup write fails', async () => {
+        const backupDir = path.resolve('test-backups');
+        const attemptedFiles = [];
+        const savedFiles = [];
+        const originalConsoleError = console.error;
+        console.error = () => {};
+
+        try {
+            const handlers = createHarness(async target => successResult(target), [], {
+                getBackupDir: () => backupDir,
+                writeFile: async (filePath) => {
+                    attemptedFiles.push(filePath);
+                    if (path.basename(filePath).startsWith('broken_')) {
+                        throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+                    }
+                    savedFiles.push(filePath);
+                }
+            });
+
+            await expect(handlers.get('batch:execute')({}, {
+                targets: [
+                    { name: 'broken', host: '192.0.2.40', type: 'cisco' },
+                    { name: 'healthy', host: '192.0.2.41', type: 'cisco' }
+                ],
+                commands: ['show running-config'],
+                options: { parallel: false, saveBackup: true }
+            })).resolves.toMatchObject({
+                success: true,
+                summary: { total: 2, success: 2, failed: 0 }
+            });
+
+            expect(attemptedFiles).toHaveLength(2);
+            expect(savedFiles).toHaveLength(1);
+            expect(path.basename(savedFiles[0])).toMatch(/^healthy_/);
+        } finally {
+            console.error = originalConsoleError;
+        }
     });
 });

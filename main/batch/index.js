@@ -2,10 +2,10 @@
  * 批量执行 IPC 处理入口模块
  */
 const fs = require('fs');
-const path = require('path');
 const { ipcMain } = require('electron');
 const { cleanBackupOutput } = require('../utils/helpers');
 const { executeTarget } = require('./executor');
+const { writeUniqueBackupFile } = require('./backup-file');
 
 // 保持稳定引用，确保执行器、暂停和停止始终操作同一次状态对象。
 const batchExecutionState = { running: false, paused: false, shouldStop: false };
@@ -43,6 +43,15 @@ function registerBatchHandlers(context, dependencies = {}) {
     const runTarget = dependencies.executeTarget || executeTarget;
     const fsModule = dependencies.fs || fs;
     const resolveBackupDir = dependencies.getBackupDir || (() => require('../config').getBackupDir());
+    const writeFile = dependencies.writeFile
+        || (fsModule.promises && typeof fsModule.promises.writeFile === 'function'
+            ? fsModule.promises.writeFile.bind(fsModule.promises)
+            : (filePath, content, options) => new Promise((resolve, reject) => {
+                fsModule.writeFile(filePath, content, options, (error) => {
+                    if (error) reject(error);
+                    else resolve();
+                });
+            }));
     
     // 批量执行命令
     ipc.handle('batch:execute', async (event, { targets, commands, options = {} }) => {
@@ -122,19 +131,27 @@ function registerBatchHandlers(context, dependencies = {}) {
             if (saveBackup) {
                 try {
                     const backupDir = resolveBackupDir();
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const usedFileNames = new Set();
+                    let savedBackupCount = 0;
                     for (const result of results) {
                         if (result.status === 'success' && result.output) {
-                            const backupFileName = `${result.name || result.host}_${timestamp}.txt`;
-                            const cleanedOutput = cleanBackupOutput(result.output);
-                            fsModule.writeFileSync(
-                                path.join(backupDir, backupFileName),
-                                cleanedOutput,
-                                'utf-8'
-                            );
+                            try {
+                                await writeUniqueBackupFile({
+                                    backupDir,
+                                    targetName: result.name || result.host,
+                                    timestamp,
+                                    content: cleanBackupOutput(result.output),
+                                    writeFile,
+                                    usedFileNames
+                                });
+                                savedBackupCount += 1;
+                            } catch (error) {
+                                console.error('保存单个配置备份失败:', error);
+                            }
                         }
                     }
-                    console.log(`[Backup] 已保存 ${results.filter(r => r.status === 'success').length} 个配置备份`);
+                    console.log(`[Backup] 已保存 ${savedBackupCount} 个配置备份`);
                 } catch (e) {
                     console.error('保存配置备份失败:', e);
                 }
