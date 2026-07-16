@@ -505,7 +505,7 @@ function _callAiApi(config, userPrompt) {
                 'Content-Length': Buffer.byteLength(body)
             },
             timeout: 300000,
-            rejectUnauthorized: false
+            rejectUnauthorized: true
         };
 
         const transport = parsedUrl.protocol === 'https:' ? https : http;

@@ -340,7 +340,7 @@ function callLLM(event, messages, systemPrompt, config) {
                 'Content-Length': Buffer.byteLength(body)
             },
             timeout: 60000,
-            rejectUnauthorized: false
+            rejectUnauthorized: true
         };
 
         const transport = parsedUrl.protocol === 'https:' ? https : http;
