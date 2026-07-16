@@ -96,6 +96,7 @@ function registerTracerouteHandlers(context) {
         }
         
         ({ win: tracerouteWindow } = createToolWindow({
+            toolId: 'traceroute',
             width: 1000,
             height: 750,
             resizable: true

@@ -140,6 +140,7 @@ function registerBroadcastDetectorHandlers(context) {
         }
 
         ({ win: detectorWindow } = createToolWindow({
+            toolId: 'broadcast-detector',
             width: 1150,
             height: 780,
             minWidth: 1000,

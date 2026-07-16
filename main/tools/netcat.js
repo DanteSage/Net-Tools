@@ -313,6 +313,7 @@ function registerNetcatHandlers(context) {
         }
 
         ({ win: netcatWindow } = createToolWindow({
+            toolId: 'netcat',
             width: 900,
             height: 720,
             resizable: true,

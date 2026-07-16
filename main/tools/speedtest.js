@@ -136,6 +136,7 @@ function registerSpeedTestHandlers(context) {
         startSpeedTestServer();
         
         ({ win: speedTestWindow } = createToolWindow({
+            toolId: 'speedtest',
             width: 500,
             height: 560,
             resizable: false

@@ -452,9 +452,7 @@
     <div id="toast" class="toast">提示信息</div>
 
     <script>
-        const { ipcRenderer } = require('electron');
-        const os = require('os');
-        const fs = require('fs');
+        const { ipcRenderer, os, fs } = window.toolApi;
 
         // Form elements
         const timeoutInput = document.getElementById('server-timeout');

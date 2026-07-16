@@ -128,6 +128,7 @@ function registerPingHandlers(context) {
         }
         
         ({ win: pingWindow } = createToolWindow({
+            toolId: 'ping',
             width: 750,
             height: 650,
             resizable: true

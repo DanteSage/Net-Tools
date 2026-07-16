@@ -5,19 +5,31 @@
 const path = require('path');
 const { BrowserWindow } = require('electron');
 const { getStoredTheme, getThemeColorsByKey } = require('../handlers/theme');
+const { getToolScope } = require('./tool-ipc-scopes');
 
 /**
  * 创建一个跟随主题的工具窗口
- * @param {Object} options BrowserWindow 配置（不含主题相关字段）
+ * @param {Object} options BrowserWindow 配置，必须包含已登记的 toolId
  * @param {string} filePath 要加载的 HTML 文件绝对路径
  * @returns {{ win: BrowserWindow, theme: { mode: string, key: string } }}
  */
 function createToolWindow(options, filePath) {
+    const {
+        toolId,
+        webPreferences: requestedWebPreferences = {},
+        ...browserWindowOptions
+    } = options;
+    if (!getToolScope(toolId)) {
+        throw new Error(`Unknown or missing toolId: ${toolId || '(empty)'}`);
+    }
+    const additionalArguments = (requestedWebPreferences.additionalArguments || [])
+        .filter(argument => !String(argument).startsWith('--net-tools-tool-id='));
+
     const theme = getStoredTheme();
     const colors = getThemeColorsByKey(theme.key, theme.mode);
 
     const win = new BrowserWindow({
-        ...options,
+        ...browserWindowOptions,
         backgroundColor: colors.background,
         titleBarStyle: 'hidden',
         titleBarOverlay: {
@@ -27,9 +39,20 @@ function createToolWindow(options, filePath) {
         },
         icon: path.join(__dirname, '..', '..', 'assets', 'icon.png'),
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            ...(options.webPreferences || {})
+            ...requestedWebPreferences,
+            nodeIntegration: false,
+            nodeIntegrationInWorker: false,
+            nodeIntegrationInSubFrames: false,
+            contextIsolation: true,
+            sandbox: false,
+            webSecurity: true,
+            allowRunningInsecureContent: false,
+            webviewTag: false,
+            preload: path.join(__dirname, 'tool-preload.js'),
+            additionalArguments: [
+                `--net-tools-tool-id=${toolId}`,
+                ...additionalArguments
+            ]
         }
     });
 

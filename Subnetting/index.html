@@ -1608,7 +1608,7 @@
 
             // IPC Theme Synchronizer
             try {
-                const { ipcRenderer } = require('electron');
+                const { ipcRenderer } = window.toolApi;
                 function applyTheme(theme) {
                     if (!theme) return;
                     document.documentElement.setAttribute('data-theme', theme.mode || 'dark');

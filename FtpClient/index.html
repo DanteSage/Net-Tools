@@ -834,9 +834,7 @@
 
     <!-- JS Logic -->
     <script>
-        const fs = require('fs');
-        const path = require('path');
-        const { ipcRenderer } = require('electron');
+        const { fs, path, os, ipcRenderer } = window.toolApi;
 
         // State variables
         let isConnected = false;
@@ -974,7 +972,7 @@
             });
 
             // Set current directory to home dir or first drive
-            const homeDir = require('os').homedir();
+            const homeDir = os.homedir();
             if (fs.existsSync(homeDir)) {
                 currentLocalPath = homeDir;
             } else if (drives.length > 0) {
@@ -1026,7 +1024,7 @@
                         const stat = fs.statSync(full);
                         localFiles.push({
                             name,
-                            isDirectory: stat.isDirectory(),
+                            isDirectory: stat.isDirectory,
                             size: stat.size
                         });
                     } catch (e) {
@@ -1072,7 +1070,8 @@
                     `<svg viewBox="0 0 24 24" width="16" height="16" style="fill: #94a3b8; vertical-align: middle; margin-right: 6px;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
 
                 const nameTd = document.createElement('td');
-                nameTd.innerHTML = `${iconSvg}${file.name}`;
+                nameTd.innerHTML = iconSvg;
+                nameTd.appendChild(document.createTextNode(file.name));
                 tr.appendChild(nameTd);
 
                 const sizeTd = document.createElement('td');
@@ -1177,7 +1176,8 @@
                     `<svg viewBox="0 0 24 24" width="16" height="16" style="fill: #94a3b8; vertical-align: middle; margin-right: 6px;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
 
                 const nameTd = document.createElement('td');
-                nameTd.innerHTML = `${iconSvg}${file.name}`;
+                nameTd.innerHTML = iconSvg;
+                nameTd.appendChild(document.createTextNode(file.name));
                 tr.appendChild(nameTd);
 
                 const sizeTd = document.createElement('td');

@@ -20,6 +20,7 @@ function registerIpv6SubnettingHandlers(context) {
         }
         
         ({ win: ipv6SubnettingWindow } = createToolWindow({
+            toolId: 'ipv6-subnetting',
             width: 950,
             height: 750,
             resizable: true

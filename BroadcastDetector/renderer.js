@@ -2,7 +2,7 @@
  * 广播与环路检测工具渲染进程逻辑 (BroadcastDetector/renderer.js)
  */
 
-const { ipcRenderer } = require('electron');
+const { ipcRenderer } = window.toolApi;
 
 let ppsHistory = [];
 let arpMap = new Map(); // ip -> { macs: Map(mac->timestamp), activeMac, conflict }

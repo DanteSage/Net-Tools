@@ -856,9 +856,7 @@
     </div>
 
     <script>
-        const { ipcRenderer } = require('electron');
-        const os = require('os');
-        const fs = require('fs');
+        const { ipcRenderer, os, fs } = window.toolApi;
 
         // 获取表单配置元素
         const timeoutInput = document.getElementById('server-timeout');

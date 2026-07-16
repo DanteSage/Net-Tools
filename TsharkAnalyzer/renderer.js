@@ -1,9 +1,8 @@
 /**
  * TsharkAnalyzer - 渲染进程主入口
- * 依赖：contextIsolation: false, nodeIntegration: true
+ * 通过隔离 preload 暴露的 toolApi 访问受限 IPC。
  */
-/* global require */
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, shell } = window.toolApi;
 
 // ==================== 状态 ====================
 
@@ -1742,7 +1741,7 @@ async function browseTsharkPath() {
 }
 
 function openWiresharkDownload() {
-    ipcRenderer.invoke('shell:openExternal', 'https://www.wireshark.org/download.html');
+    shell.openExternal('https://www.wireshark.org/download.html');
 }
 
 // ==================== 设置面板 ====================

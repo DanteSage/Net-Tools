@@ -1,7 +1,7 @@
 /**
  * DNS Lookup 工具渲染进程
  */
-const { ipcRenderer } = require('electron');
+const { ipcRenderer } = window.toolApi;
 
 // ==================== 主题同步 ====================
 

@@ -55,6 +55,7 @@ function registerPortScannerHandlers(context) {
         }
         
         ({ win: portScannerWindow } = createToolWindow({
+            toolId: 'portscanner',
             width: 850,
             height: 750,
             resizable: true

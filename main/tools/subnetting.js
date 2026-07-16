@@ -20,6 +20,7 @@ function registerSubnettingHandlers(context) {
         }
         
         ({ win: subnettingWindow } = createToolWindow({
+            toolId: 'subnetting',
             width: 950,
             height: 750,
             resizable: true

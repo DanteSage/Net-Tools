@@ -53,6 +53,7 @@ function registerPacketCaptureHandlers(context) {
                 }
                 
                 ({ win: packetCaptureWindow } = createToolWindow({
+                    toolId: 'packet-capture',
                     width: 1100,
                     height: 750,
                     resizable: true

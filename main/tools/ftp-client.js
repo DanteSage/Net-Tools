@@ -20,6 +20,7 @@ function registerFtpClientHandlers(context) {
         }
         
         ({ win: ftpClientWindow } = createToolWindow({
+            toolId: 'ftp-client',
             width: 1100,
             height: 780,
             resizable: true

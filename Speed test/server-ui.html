@@ -216,7 +216,7 @@
     <p class="tip">关闭此窗口将停止测速服务</p>
 
     <script>
-        const { ipcRenderer, shell, clipboard } = require('electron');
+        const { ipcRenderer, shell, clipboard } = window.toolApi;
 
         let serverUrl = '';
         let localUrl = '';

@@ -995,6 +995,7 @@ function registerTsharkAnalyzerHandlers(context) {
         }
 
         ({ win: analyzerWindow } = createToolWindow({
+            toolId: 'tshark-analyzer',
             width: 1440,
             height: 920,
             minWidth: 1100,

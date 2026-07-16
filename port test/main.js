@@ -11,8 +11,11 @@ function createWindow() {
         height: 700,
         resizable: true,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false,
+            preload: path.join(__dirname, '..', 'main', 'utils', 'tool-preload.js'),
+            additionalArguments: ['--net-tools-tool-id=portscanner']
         },
         icon: path.join(__dirname, 'icon.png')
     });

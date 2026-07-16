@@ -564,10 +564,10 @@
                         <div style="margin-bottom: 6px; font-weight: 600; color: var(--text);">🔧 底层运行依赖与安装入口：</div>
                         <div style="margin-bottom: 8px;">该工具嗅探基于 <strong>Wireshark (Tshark)</strong> 抓包引擎及 <strong>Npcap</strong> 网卡驱动运行。若本机未就绪，请安装：</div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <button class="btn btn-secondary btn-small" onclick="require('electron').shell.openExternal('https://www.wireshark.org/download.html')" style="font-size: 0.7rem; padding: 4px 8px;">
+                            <button class="btn btn-secondary btn-small" onclick="window.toolApi.shell.openExternal('https://www.wireshark.org/download.html')" style="font-size: 0.7rem; padding: 4px 8px;">
                                 🌐 下载 Wireshark / Tshark
                             </button>
-                            <button class="btn btn-secondary btn-small" onclick="require('electron').shell.openExternal('https://npcap.com/#download')" style="font-size: 0.7rem; padding: 4px 8px;">
+                            <button class="btn btn-secondary btn-small" onclick="window.toolApi.shell.openExternal('https://npcap.com/#download')" style="font-size: 0.7rem; padding: 4px 8px;">
                                 🛡️ 下载 Npcap 网卡驱动
                             </button>
                         </div>

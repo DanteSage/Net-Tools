@@ -190,6 +190,7 @@ function registerDnsLookupHandlers(context) {
             return { success: true };
         }
         ({ win: dnsWindow } = createToolWindow({
+            toolId: 'dns-lookup',
             width: 1100,
             height: 760,
             resizable: true

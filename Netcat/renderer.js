@@ -1,7 +1,7 @@
 /**
  * Netcat 工具渲染进程逻辑
  */
-const { ipcRenderer } = require('electron');
+const { ipcRenderer } = window.toolApi;
 
 // ==================== 主题同步 ====================
 
@@ -59,6 +59,10 @@ function hexDump(hex) {
         lines.push(groups.slice(i, i + 16).join(' '));
     }
     return lines.join('\n');
+}
+
+function utf8ToHex(text) {
+    return Array.from(new TextEncoder().encode(text), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -162,7 +166,7 @@ async function sendClient() {
     try {
         const r = await ipcRenderer.invoke('netcat:client-send', { data, format, appendNewline: newline });
         if (r && r.success) {
-            const display = clientShowHex.checked ? hexDump(Buffer.from(data + (newline ? '\r\n' : ''), 'utf8').toString('hex')) : data;
+            const display = clientShowHex.checked ? hexDump(utf8ToHex(data + (newline ? '\r\n' : ''))) : data;
             appendLog(clientLog, 'out', display);
             clientInput.value = '';
         } else {

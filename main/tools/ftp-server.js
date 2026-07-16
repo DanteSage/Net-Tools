@@ -23,6 +23,7 @@ function registerFtpServerHandlers(context) {
         }
 
         ({ win: ftpServerWindow } = createToolWindow({
+            toolId: 'ftp-server',
             width: 1000,
             height: 650,
             resizable: true

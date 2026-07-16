@@ -32,6 +32,7 @@ function registerTftpServerHandlers(context) {
 
         forceClose = false;
         ({ win: tftpServerWindow } = createToolWindow({
+            toolId: 'tftp-server',
             width: 1100,
             height: 750,
             resizable: true

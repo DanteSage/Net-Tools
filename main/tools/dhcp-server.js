@@ -38,6 +38,7 @@ function registerDhcpServerHandlers(context) {
 
         forceClose = false;
         ({ win: dhcpServerWindow } = createToolWindow({
+            toolId: 'dhcp-server',
             width: 1000,
             height: 700,
             resizable: true
