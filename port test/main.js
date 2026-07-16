@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const net = require('net');
 const dgram = require('dgram');
+const { normalizeScanConcurrency } = require('../main/utils/scan-options');
 
 let mainWindow;
 
@@ -148,6 +149,7 @@ const COMMON_PORTS = {
 // IPC 处理
 ipcMain.handle('scan-ports', async (event, { host, ports, protocol, timeout, concurrency }) => {
     const portList = parsePorts(ports);
+    const batchSize = normalizeScanConcurrency(concurrency);
     const results = [];
     let completed = 0;
     const total = portList.length;
@@ -155,8 +157,8 @@ ipcMain.handle('scan-ports', async (event, { host, ports, protocol, timeout, con
     // 并发控制
     const scanPort = protocol === 'TCP' ? scanTcpPort : scanUdpPort;
 
-    for (let i = 0; i < portList.length; i += concurrency) {
-        const batch = portList.slice(i, i + concurrency);
+    for (let i = 0; i < portList.length; i += batchSize) {
+        const batch = portList.slice(i, i + batchSize);
         const batchResults = await Promise.all(
             batch.map(port => scanPort(host, port, timeout))
         );

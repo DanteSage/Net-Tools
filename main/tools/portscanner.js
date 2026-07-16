@@ -5,6 +5,7 @@ const path = require('path');
 const net = require('net');
 const { ipcMain } = require('electron');
 const { parsePortRange } = require('../utils/helpers');
+const { normalizeScanConcurrency } = require('../utils/scan-options');
 const { createToolWindow } = require('../utils/toolWindow');
 
 let portScannerWindow = null;
@@ -45,10 +46,11 @@ function scanTcpPort(host, port, timeout = 2000) {
 /**
  * 注册端口扫描工具相关 IPC 处理程序
  */
-function registerPortScannerHandlers(context) {
-    const { getMainWindow } = context;
+function registerPortScannerHandlers(context, dependencies = {}) {
+    const ipc = dependencies.ipcMain || ipcMain;
+    const scanPort = dependencies.scanTcpPort || scanTcpPort;
 
-    ipcMain.handle('portscanner:open', async () => {
+    ipc.handle('portscanner:open', async () => {
         if (portScannerWindow && !portScannerWindow.isDestroyed()) {
             portScannerWindow.focus();
             return { success: true };
@@ -69,19 +71,20 @@ function registerPortScannerHandlers(context) {
     });
 
     // 端口扫描
-    ipcMain.handle('scan-ports', async (event, { host, ports, protocol, timeout, concurrency }) => {
+    ipc.handle('scan-ports', async (event, { host, ports, protocol, timeout, concurrency }) => {
         portScanCancelled = false;
         const portList = parsePortRange(ports);
+        const batchSize = normalizeScanConcurrency(concurrency);
         const results = [];
         let completed = 0;
         const total = portList.length;
 
-        for (let i = 0; i < portList.length; i += concurrency) {
+        for (let i = 0; i < portList.length; i += batchSize) {
             if (portScanCancelled) break;
             
-            const batch = portList.slice(i, i + concurrency);
+            const batch = portList.slice(i, i + batchSize);
             const batchResults = await Promise.all(
-                batch.map(port => scanTcpPort(host, port, timeout))
+                batch.map(port => scanPort(host, port, timeout))
             );
 
             for (const result of batchResults) {
@@ -102,19 +105,19 @@ function registerPortScannerHandlers(context) {
     });
 
     // 停止扫描
-    ipcMain.handle('stop-scan', async () => {
+    ipc.handle('stop-scan', async () => {
         portScanCancelled = true;
         return { success: true };
     });
 
     // 单端口快速测试
-    ipcMain.handle('quick-test', async (event, { host, port, protocol, timeout }) => {
+    ipc.handle('quick-test', async (event, { host, port, protocol, timeout }) => {
         const p = parseInt(port, 10);
         if (isNaN(p) || p < 1 || p > 65535) {
             return { error: '无效端口号' };
         }
-        return await scanTcpPort(host, p, timeout);
+        return await scanPort(host, p, timeout);
     });
 }
 
-module.exports = { registerPortScannerHandlers };
+module.exports = { scanTcpPort, registerPortScannerHandlers };
