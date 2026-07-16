@@ -22,8 +22,9 @@ try {
  * @param {Function} context.getMainWindow - 获取主窗口函数
  * @param {Function} context.isQuitting - 检查是否正在退出
  */
-function registerSSHHandlers(context) {
+function registerSSHHandlers(context, dependencies = {}) {
     const { activeConnections, getMainWindow, isQuitting } = context;
+    const ipc = dependencies.ipcMain || ipcMain;
 
     async function writeToShell(connectionId, data) {
         const stream = activeConnections.get(`${connectionId}_shell`);
@@ -55,7 +56,7 @@ function registerSSHHandlers(context) {
     }
 
     // SSH连接测试
-    ipcMain.handle('ssh:test', async (event, config) => {
+    ipc.handle('ssh:test', async (event, config) => {
         if (!ssh2) {
             return { success: false, error: 'SSH2 模块未安装' };
         }
@@ -84,7 +85,7 @@ function registerSSHHandlers(context) {
     });
 
     // SSH连接
-    ipcMain.handle('ssh:connect', async (event, config) => {
+    ipc.handle('ssh:connect', async (event, config) => {
         if (!ssh2) {
             return { success: false, error: 'SSH2 模块未安装，请运行 npm install' };
         }
@@ -109,7 +110,7 @@ function registerSSHHandlers(context) {
     });
 
     // SSH执行命令
-    ipcMain.handle('ssh:execute', async (event, { connectionId, command }) => {
+    ipc.handle('ssh:execute', async (event, { connectionId, command }) => {
         const conn = activeConnections.get(connectionId);
         if (!conn) {
             return { success: false, error: '连接不存在或已断开' };
@@ -125,8 +126,22 @@ function registerSSHHandlers(context) {
                 let stdout = '';
                 let stderr = '';
 
+                let settled = false;
+                const settle = (result) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(result);
+                };
+                const handleStreamError = (error) => {
+                    settle({ success: false, error: error.message });
+                    if (!stream.destroyed && typeof stream.destroy === 'function') {
+                        try { stream.destroy(); } catch (_) {}
+                    }
+                };
+
+                stream.once('error', handleStreamError);
                 stream.on('close', (code) => {
-                    resolve({
+                    settle({
                         success: true,
                         stdout,
                         stderr,
@@ -141,12 +156,13 @@ function registerSSHHandlers(context) {
                 stream.stderr.on('data', (data) => {
                     stderr += data.toString();
                 });
+                stream.stderr.once('error', handleStreamError);
             });
         });
     });
 
     // SSH创建交互式Shell
-    ipcMain.handle('ssh:shell', async (event, { connectionId, cols, rows }) => {
+    ipc.handle('ssh:shell', async (event, { connectionId, cols, rows }) => {
         const conn = activeConnections.get(connectionId);
         if (!conn) {
             return { success: false, error: '连接不存在或已断开' };
@@ -184,6 +200,27 @@ function registerSSHHandlers(context) {
                     });
                 });
 
+                let cleanedUp = false;
+                const cleanupShell = (error = null) => {
+                    if (cleanedUp) return;
+                    cleanedUp = true;
+                    if (error && !stream.destroyed && typeof stream.destroy === 'function') {
+                        try { stream.destroy(); } catch (_) {}
+                    }
+                    outputBuffer.dispose(true);
+                    activeConnections.delete(`${connectionId}_shell`);
+                    if (isQuitting()) return;
+                    const mainWindow = getMainWindow();
+                    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+                    try {
+                        mainWindow.webContents.send('ssh:close', {
+                            connectionId,
+                            shellId,
+                            ...(error ? { error: error.message } : {})
+                        });
+                    } catch (e) { }
+                };
+
                 stream.on('data', (chunk) => {
                     try {
                         const decodedText = decodeChunk(connectionId, chunk);
@@ -193,16 +230,8 @@ function registerSSHHandlers(context) {
                     } catch (e) { }
                 });
 
-                stream.on('close', () => {
-                    outputBuffer.dispose(true);
-                    activeConnections.delete(`${connectionId}_shell`);
-                    if (isQuitting()) return;
-                    const mainWindow = getMainWindow();
-                    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
-                    try {
-                        mainWindow.webContents.send('ssh:close', { connectionId, shellId });
-                    } catch (e) { }
-                });
+                stream.once('error', (error) => cleanupShell(error));
+                stream.on('close', () => cleanupShell());
 
                 activeConnections.set(`${connectionId}_shell`, stream);
                 resolve({ success: true, shellId });
@@ -211,21 +240,21 @@ function registerSSHHandlers(context) {
     });
 
     // SSH写入数据到Shell
-    ipcMain.handle('ssh:write', async (event, { connectionId, data }) => {
+    ipc.handle('ssh:write', async (event, { connectionId, data }) => {
         return writeToShell(connectionId, data);
     });
 
     // Interactive input does not need a Promise round trip for every keypress.
-    ipcMain.on('ssh:input', (event, { connectionId, data }) => {
+    ipc.on('ssh:input', (event, { connectionId, data }) => {
         writeToShell(connectionId, data);
     });
 
-    ipcMain.on('ssh:resize', (event, { connectionId, cols, rows }) => {
+    ipc.on('ssh:resize', (event, { connectionId, cols, rows }) => {
         resizeShell(connectionId, cols, rows);
     });
 
     // SSH断开连接
-    ipcMain.handle('ssh:disconnect', async (event, { connectionId }) => {
+    ipc.handle('ssh:disconnect', async (event, { connectionId }) => {
         const conn = activeConnections.get(connectionId);
         if (conn) {
             conn.end();
@@ -261,7 +290,7 @@ function registerSSHHandlers(context) {
     }
 
     // SFTP 读取目录列表
-    ipcMain.handle('sftp:list', async (event, { connectionId, path }) => {
+    ipc.handle('sftp:list', async (event, { connectionId, path }) => {
         try {
             const sftp = await getSftp(connectionId);
             return new Promise((resolve) => {
@@ -291,7 +320,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 创建文件夹
-    ipcMain.handle('sftp:mkdir', async (event, { connectionId, path }) => {
+    ipc.handle('sftp:mkdir', async (event, { connectionId, path }) => {
         try {
             const sftp = await getSftp(connectionId);
             return new Promise((resolve) => {
@@ -306,7 +335,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 删除文件夹
-    ipcMain.handle('sftp:rmdir', async (event, { connectionId, path }) => {
+    ipc.handle('sftp:rmdir', async (event, { connectionId, path }) => {
         try {
             const sftp = await getSftp(connectionId);
             return new Promise((resolve) => {
@@ -321,7 +350,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 删除文件
-    ipcMain.handle('sftp:delete', async (event, { connectionId, path }) => {
+    ipc.handle('sftp:delete', async (event, { connectionId, path }) => {
         try {
             const sftp = await getSftp(connectionId);
             return new Promise((resolve) => {
@@ -336,7 +365,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 重命名或移动
-    ipcMain.handle('sftp:rename', async (event, { connectionId, oldPath, newPath }) => {
+    ipc.handle('sftp:rename', async (event, { connectionId, oldPath, newPath }) => {
         try {
             const sftp = await getSftp(connectionId);
             return new Promise((resolve) => {
@@ -351,7 +380,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 上传文件
-    ipcMain.handle('sftp:upload', async (event, { connectionId, localPath, remotePath }) => {
+    ipc.handle('sftp:upload', async (event, { connectionId, localPath, remotePath }) => {
         try {
             const sftp = await getSftp(connectionId);
             const mainWindow = getMainWindow();
@@ -380,7 +409,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 下载文件
-    ipcMain.handle('sftp:download', async (event, { connectionId, remotePath, localPath }) => {
+    ipc.handle('sftp:download', async (event, { connectionId, remotePath, localPath }) => {
         try {
             const sftp = await getSftp(connectionId);
             const mainWindow = getMainWindow();
@@ -409,7 +438,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 读取文本内容
-    ipcMain.handle('sftp:readText', async (event, { connectionId, path, encoding }) => {
+    ipc.handle('sftp:readText', async (event, { connectionId, path, encoding }) => {
         try {
             const sftp = await getSftp(connectionId);
             return new Promise((resolve) => {
@@ -426,7 +455,7 @@ function registerSSHHandlers(context) {
     });
 
     // SFTP 写入文本内容
-    ipcMain.handle('sftp:writeText', async (event, { connectionId, path, content, encoding }) => {
+    ipc.handle('sftp:writeText', async (event, { connectionId, path, content, encoding }) => {
         try {
             const sftp = await getSftp(connectionId);
             return new Promise((resolve) => {

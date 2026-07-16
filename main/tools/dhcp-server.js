@@ -79,6 +79,7 @@ function registerDhcpServerHandlers(context) {
                 dnsList: config.dnsList || [],
                 leaseTime: config.leaseTime
             });
+            const currentServerInstance = dhcpServerInstance;
 
             // 监听日志事件
             dhcpServerInstance.on('log', (logObj) => {
@@ -94,6 +95,22 @@ function registerDhcpServerHandlers(context) {
                 if (dhcpServerWindow && !dhcpServerWindow.isDestroyed()) {
                     try {
                         dhcpServerWindow.webContents.send('dhcpServer:leases', leases);
+                    } catch (e) {}
+                }
+            });
+
+            // 使用普通自定义事件承接运行期 Socket 错误，避免 EventEmitter
+            // 对未监听的特殊 `error` 事件执行抛异常语义。
+            dhcpServerInstance.on('server-error', (err) => {
+                if (dhcpServerInstance === currentServerInstance) {
+                    dhcpServerInstance = null;
+                }
+                if (dhcpServerWindow && !dhcpServerWindow.isDestroyed()) {
+                    try {
+                        dhcpServerWindow.webContents.send('dhcpServer:log', {
+                            message: `DHCP 服务已因 Socket 错误停止: ${err.message}`,
+                            type: 'error'
+                        });
                     } catch (e) {}
                 }
             });

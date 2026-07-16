@@ -249,8 +249,17 @@ function matchFingerprints(res) {
 /**
  * 遍历 LLDP 邻居表 (仅 Walk 主机名与接口描述列，大幅提速)
  */
-function createSnmpSession(ip, params, overrides = {}) {
+function attachSnmpErrorHandler(session, onError) {
+    const handleError = typeof onError === 'function'
+        ? onError
+        : (error) => console.error(`SNMP Session 错误: ${error.message}`);
+    session.on('error', handleError);
+    return session;
+}
+
+function createSnmpSession(ip, params, overrides = {}, onError) {
     const version = (params && params.version) || '2c';
+    let session;
     if (version === '3') {
         const username = params.username || '';
         const authProto = params.authProto || 'none';
@@ -280,7 +289,7 @@ function createSnmpSession(ip, params, overrides = {}) {
             user.level = level;
         }
 
-        return snmp.createV3Session(ip, user, {
+        session = snmp.createV3Session(ip, user, {
             port: 161,
             timeout: SNMP_INTERFACE_TIMEOUT,
             retries: SNMP_INTERFACE_RETRIES,
@@ -290,7 +299,7 @@ function createSnmpSession(ip, params, overrides = {}) {
     } else {
         const community = (params && params.community) || 'public';
         const snmpVersion = version === '1' ? snmp.Version1 : snmp.Version2c;
-        return snmp.createSession(ip, community, {
+        session = snmp.createSession(ip, community, {
             port: 161,
             version: snmpVersion,
             timeout: SNMP_INTERFACE_TIMEOUT,
@@ -299,6 +308,7 @@ function createSnmpSession(ip, params, overrides = {}) {
             ...overrides
         });
     }
+    return attachSnmpErrorHandler(session, onError);
 }
 
 function closeSession(session) {
@@ -1181,4 +1191,8 @@ function registerReconnaissanceHandlers(context) {
     });
 }
 
-module.exports = { registerReconnaissanceHandlers };
+module.exports = {
+    attachSnmpErrorHandler,
+    createSnmpSession,
+    registerReconnaissanceHandlers
+};

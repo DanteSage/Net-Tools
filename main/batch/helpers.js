@@ -35,7 +35,7 @@ const DISABLE_PAGER_COMMANDS = {
  * @returns {Promise<string>}
  */
 function waitForPrompt(stream, deviceType, timeout = 10000, idleThreshold = 3000) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         let buffer = '';
         let timer = null;
         let idleTimer = null;
@@ -46,6 +46,12 @@ function waitForPrompt(stream, deviceType, timeout = 10000, idleThreshold = 3000
             if (timer) clearTimeout(timer);
             if (idleTimer) clearInterval(idleTimer);
             stream.removeListener('data', checkPrompt);
+            stream.removeListener('error', handleError);
+        };
+
+        const handleError = (error) => {
+            cleanup();
+            reject(error);
         };
         
         const checkPrompt = (data) => {
@@ -54,6 +60,7 @@ function waitForPrompt(stream, deviceType, timeout = 10000, idleThreshold = 3000
         };
         
         stream.on('data', checkPrompt);
+        stream.once('error', handleError);
         
         // 空闲检测（无新数据且检测到提示符则完成）
         idleTimer = setInterval(() => {

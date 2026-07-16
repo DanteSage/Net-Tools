@@ -7,6 +7,73 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+function destroyQuietly(stream) {
+    if (!stream || typeof stream.destroy !== 'function' || stream.destroyed) return;
+    try { stream.destroy(); } catch (_) {}
+}
+
+function pipeDataTransfer(source, destination) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const cleanup = () => {
+            destination.removeListener('finish', handleFinish);
+            source.removeListener('error', handleError);
+            destination.removeListener('error', handleError);
+        };
+        const settle = (error) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (error) {
+                try { source.unpipe(destination); } catch (_) {}
+                destroyQuietly(source);
+                destroyQuietly(destination);
+                reject(error);
+                return;
+            }
+            resolve();
+        };
+        const handleFinish = () => settle();
+        const handleError = (error) => settle(error);
+
+        source.on('error', handleError);
+        destination.on('error', handleError);
+        destination.once('finish', handleFinish);
+
+        try {
+            source.pipe(destination);
+        } catch (error) {
+            settle(error);
+        }
+    });
+}
+
+function sendDataAndClose(dataSocket, data, encoding = 'utf8') {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const handleError = (error) => {
+            if (settled) return;
+            settled = true;
+            reject(error);
+        };
+        dataSocket.once('error', handleError);
+        try {
+            dataSocket.end(data, encoding, (error) => {
+                if (error) {
+                    handleError(error);
+                    return;
+                }
+                if (settled) return;
+                settled = true;
+                dataSocket.removeListener('error', handleError);
+                resolve();
+            });
+        } catch (error) {
+            handleError(error);
+        }
+    });
+}
+
 class FtpServerBackend {
     constructor(options) {
         this.port = options.port || 21;
@@ -89,7 +156,8 @@ class FtpServerBackend {
             passivePort: null,
             activeAddr: null,
             activePort: null,
-            dataSocket: null
+            dataSocket: null,
+            dataSocketError: null
         };
 
         const clientIp = socket.remoteAddress;
@@ -309,18 +377,44 @@ class FtpServerBackend {
         if (session.passiveServer) {
             try { session.passiveServer.close(); } catch (e) {}
         }
+        destroyQuietly(session.dataSocket);
+        session.dataSocket = null;
+        session.passivePort = null;
+        session.dataSocketError = null;
 
         // 创建被动数据端口服务器监听连接
-        session.passiveServer = net.createServer((dataSocket) => {
+        const passiveServer = net.createServer((dataSocket) => {
             session.dataSocket = dataSocket;
+            dataSocket.on('error', (err) => {
+                this.log(`[数据通道错误] 被动连接异常: ${err.message}`);
+                if (session.dataSocket === dataSocket) {
+                    session.dataSocket = null;
+                    session.dataSocketError = err;
+                    destroyQuietly(dataSocket);
+                }
+            });
             // 收到连接后立刻停止数据服务器监听，保证单次会话安全性
-            try { session.passiveServer.close(); } catch (e) {}
-            session.passiveServer = null;
+            try { passiveServer.close(); } catch (e) {}
+            if (session.passiveServer === passiveServer) {
+                session.passiveServer = null;
+            }
+        });
+        session.passiveServer = passiveServer;
+
+        passiveServer.on('error', (err) => {
+            this.log(`[被动模式错误] 数据端口监听失败: ${err.message}`);
+            if (session.passiveServer === passiveServer) {
+                session.passiveServer = null;
+                session.passivePort = null;
+                session.dataSocketError = err;
+            }
+            try { passiveServer.close(); } catch (_) {}
+            try { socket.write(`425 Can't open passive connection: ${err.message}.\r\n`); } catch (_) {}
         });
 
         // 端口设为 0 以获取系统闲置随机端口
-        session.passiveServer.listen(0, this.host, () => {
-            const port = session.passiveServer.address().port;
+        passiveServer.listen(0, this.host, () => {
+            const port = passiveServer.address().port;
             session.passivePort = port;
 
             const p1 = Math.floor(port / 256);
@@ -364,7 +458,10 @@ class FtpServerBackend {
 
         session.activeAddr = ip;
         session.activePort = port;
+        destroyQuietly(session.dataSocket);
         session.dataSocket = null; // 清除已有的被动套接字
+        session.dataSocketError = null;
+        session.passivePort = null;
 
         socket.write('200 PORT command successful.\r\n');
         this.log(`[主动模式] 记录客户端连接方向: ${ip}:${port}`);
@@ -375,25 +472,39 @@ class FtpServerBackend {
      */
     getDataConnection(session) {
         return new Promise((resolve, reject) => {
-            // 被动模式：客户端已连接上来
-            if (session.dataSocket) {
+            const takePassiveSocket = () => {
+                if (session.dataSocketError) {
+                    const error = session.dataSocketError;
+                    session.dataSocketError = null;
+                    session.passivePort = null;
+                    reject(error);
+                    return true;
+                }
+                if (!session.dataSocket) return false;
                 const ds = session.dataSocket;
                 session.dataSocket = null;
-                resolve(ds);
-                return;
-            }
+                session.passivePort = null;
+                if (ds.destroyed) {
+                    reject(new Error('被动模式数据连接已关闭'));
+                } else {
+                    resolve(ds);
+                }
+                return true;
+            };
+
+            // 被动模式：客户端已连接上来
+            if (takePassiveSocket()) return;
 
             // 被动模式：客户端连接还在挂起，等待最多 5000ms
             if (session.passivePort) {
                 let checkAttempts = 0;
                 const interval = setInterval(() => {
-                    if (session.dataSocket) {
+                    if (session.dataSocket || session.dataSocketError) {
                         clearInterval(interval);
-                        const ds = session.dataSocket;
-                        session.dataSocket = null;
-                        resolve(ds);
+                        takePassiveSocket();
                     } else if (++checkAttempts >= 25) { // 5000ms timeout
                         clearInterval(interval);
+                        session.passivePort = null;
                         reject(new Error('等待被动模式数据连接超时'));
                     }
                 }, 200);
@@ -403,10 +514,16 @@ class FtpServerBackend {
             // 主动模式：服务器需要向客户端建立连接
             if (session.activeAddr && session.activePort) {
                 this.log(`[数据通道] 正在主动连回客户端 ${session.activeAddr}:${session.activePort}`);
+                let settled = false;
                 const ds = net.connect(session.activePort, session.activeAddr, () => {
+                    if (settled) return;
+                    settled = true;
                     resolve(ds);
                 });
                 ds.on('error', (err) => {
+                    this.log(`[数据通道错误] 主动连接异常: ${err.message}`);
+                    if (settled) return;
+                    settled = true;
                     reject(err);
                 });
                 return;
@@ -422,9 +539,10 @@ class FtpServerBackend {
     async handleList(socket, session) {
         const { realPath } = this.getRealPath(session, '.');
         this.log(`[数据传输] 开始获取目录文件列表: ${session.currentDir}`);
+        let dataSocket = null;
 
         try {
-            const dataSocket = await this.getDataConnection(session);
+            dataSocket = await this.getDataConnection(session);
             socket.write('150 Here comes the directory listing.\r\n');
 
             let files = [];
@@ -454,12 +572,13 @@ class FtpServerBackend {
                 } catch (e) {}
             }
 
-            dataSocket.write(responseData, 'utf8');
-            dataSocket.end();
+            await sendDataAndClose(dataSocket, responseData, 'utf8');
             socket.write('226 Directory send OK.\r\n');
             this.log(`[数据传输] 成功发送目录文件列表: ${session.currentDir}`);
         } catch (err) {
-            socket.write(`425 Can't open data connection: ${err.message}.\r\n`);
+            socket.write(dataSocket
+                ? `451 Directory transfer aborted: ${err.message}.\r\n`
+                : `425 Can't open data connection: ${err.message}.\r\n`);
             this.log(`[数据传输错误] LIST 失败: ${err.message}`);
         }
     }
@@ -470,9 +589,10 @@ class FtpServerBackend {
     async handleRetr(socket, session, arg) {
         const { realPath } = this.getRealPath(session, arg);
         this.log(`[数据传输] 客户端下载请求: ${realPath}`);
+        let dataSocket = null;
 
         try {
-            const dataSocket = await this.getDataConnection(session);
+            dataSocket = await this.getDataConnection(session);
 
             if (!fs.existsSync(realPath) || fs.statSync(realPath).isDirectory()) {
                 socket.write('550 File not found or is a directory.\r\n');
@@ -483,19 +603,15 @@ class FtpServerBackend {
             socket.write('150 Opening BINARY mode data connection.\r\n');
 
             const readStream = fs.createReadStream(realPath);
-            readStream.pipe(dataSocket);
-
-            readStream.on('error', (err) => {
-                this.log(`[文件读取错误] ${err.message}`);
-                try { socket.write('451 Local file reading error.\r\n'); } catch (e) {}
-            });
-
-            dataSocket.on('close', () => {
-                try { socket.write('226 Transfer complete.\r\n'); } catch (e) {}
-                this.log(`[数据传输成功] 下载成功: ${realPath}`);
-            });
+            await pipeDataTransfer(readStream, dataSocket);
+            try { socket.write('226 Transfer complete.\r\n'); } catch (e) {}
+            this.log(`[数据传输成功] 下载成功: ${realPath}`);
         } catch (err) {
-            try { socket.write(`425 Can't open data connection: ${err.message}.\r\n`); } catch (e) {}
+            try {
+                socket.write(dataSocket
+                    ? `451 File transfer aborted: ${err.message}.\r\n`
+                    : `425 Can't open data connection: ${err.message}.\r\n`);
+            } catch (e) {}
             this.log(`[数据传输错误] RETR 失败: ${err.message}`);
         }
     }
@@ -506,25 +622,22 @@ class FtpServerBackend {
     async handleStor(socket, session, arg) {
         const { realPath } = this.getRealPath(session, arg);
         this.log(`[数据传输] 客户端上传请求: ${realPath}`);
+        let dataSocket = null;
 
         try {
-            const dataSocket = await this.getDataConnection(session);
+            dataSocket = await this.getDataConnection(session);
             socket.write('150 Ok to send data.\r\n');
 
             const writeStream = fs.createWriteStream(realPath);
-            dataSocket.pipe(writeStream);
-
-            writeStream.on('error', (err) => {
-                this.log(`[文件写入错误] ${err.message}`);
-                try { socket.write('451 Local file writing error.\r\n'); } catch (e) {}
-            });
-
-            dataSocket.on('close', () => {
-                try { socket.write('226 Transfer complete.\r\n'); } catch (e) {}
-                this.log(`[数据传输成功] 上传成功: ${realPath}`);
-            });
+            await pipeDataTransfer(dataSocket, writeStream);
+            try { socket.write('226 Transfer complete.\r\n'); } catch (e) {}
+            this.log(`[数据传输成功] 上传成功: ${realPath}`);
         } catch (err) {
-            try { socket.write(`425 Can't open data connection: ${err.message}.\r\n`); } catch (e) {}
+            try {
+                socket.write(dataSocket
+                    ? `451 File transfer aborted: ${err.message}.\r\n`
+                    : `425 Can't open data connection: ${err.message}.\r\n`);
+            } catch (e) {}
             this.log(`[数据传输错误] STOR 失败: ${err.message}`);
         }
     }

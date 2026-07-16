@@ -235,8 +235,9 @@ async function executeTelnetTarget(target, commands, options, state, context) {
 /**
  * 执行 SSH 批量命令
  */
-async function executeSSHTarget(target, commands, options, state, context) {
-    if (!ssh2) {
+async function executeSSHTarget(target, commands, options, state, context, dependencies = {}) {
+    const sshModule = dependencies.ssh2 || ssh2;
+    if (!sshModule) {
         throw new Error('SSH2模块未安装');
     }
     
@@ -245,95 +246,113 @@ async function executeSSHTarget(target, commands, options, state, context) {
     const cmdTimeout = saveBackup ? 90000 : Math.max(baseTimeout / commands.length, 5000);
     const idleThreshold = saveBackup ? 5000 : 3000;
     
-    const conn = new ssh2.Client();
-    
-    // 连接设备
-    await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            conn.end();
-            reject(new Error('连接超时'));
-        }, timeout);
-        
-        conn.on('ready', () => {
-            clearTimeout(timer);
-            resolve();
-        });
-        
-        conn.on('error', (err) => {
-            clearTimeout(timer);
-            reject(err);
-        });
-        
-        conn.connect({
-            host: target.host,
-            port: target.port || 22,
-            username: target.username,
-            password: target.password,
-            readyTimeout: timeout,
-            algorithms: SSH_ALGORITHMS_SIMPLE
-        });
-    });
-    
-    // 使用 shell 模式执行命令
-    const output = await new Promise((resolve, reject) => {
-        conn.shell({ term: 'xterm' }, async (err, stream) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            
-            let fullOutput = '';
-            stream.on('data', (data) => {
-                fullOutput += data.toString();
+    const conn = new sshModule.Client();
+
+    try {
+        // 连接设备
+        await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                conn.end();
+                reject(new Error('连接超时'));
+            }, timeout);
+
+            conn.on('ready', () => {
+                clearTimeout(timer);
+                resolve();
             });
-            
-            try {
-                await waitForPrompt(stream, target.type, 5000, 2000);
-                
-                // 自动进入 enable 模式
-                if ((target.type === 'cisco' || target.type === 'ruijie') && target.enablePassword) {
-                    if (fullOutput.trim().endsWith('>')) {
-                        stream.write('enable\n');
-                        await waitForPrompt(stream, target.type, 5000, 2000);
-                        stream.write(target.enablePassword + '\n');
-                        await waitForPrompt(stream, target.type, 5000, 2000);
-                    }
-                }
-                
-                // 禁用分页
-                const pagerCmd = getDisablePagerCommand(target.type);
-                if (pagerCmd) {
-                    stream.write(pagerCmd + '\n');
-                    await waitForPrompt(stream, target.type, 10000, 2000);
-                }
-                
-                // 执行命令列表
-                for (let i = 0; i < commands.length; i++) {
-                    if (state.shouldStop) break;
-                    while (state.paused && !state.shouldStop) {
-                        await delay(500);
-                    }
-                    
-                    const cmd = replaceVariables(commands[i], target, variables);
-                    stream.write(cmd + '\n');
-                    await waitForPrompt(stream, target.type, cmdTimeout, idleThreshold);
-                }
-                
-                const exitCmd = getExitCommand(target.type);
-                stream.write(exitCmd + '\n');
-                await delay(500);
-                stream.end();
-                
-                resolve(fullOutput);
-            } catch (cmdErr) {
-                stream.end();
-                reject(cmdErr);
-            }
+
+            conn.on('error', (err) => {
+                clearTimeout(timer);
+                reject(err);
+            });
+
+            conn.connect({
+                host: target.host,
+                port: target.port || 22,
+                username: target.username,
+                password: target.password,
+                readyTimeout: timeout,
+                algorithms: SSH_ALGORITHMS_SIMPLE
+            });
         });
-    });
-    
-    conn.end();
-    return filterSensitiveOutput(output, target.username, target.password);
+
+        // 使用 shell 模式执行命令
+        const output = await new Promise((resolve, reject) => {
+            conn.shell({ term: 'xterm' }, async (err, stream) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                let settled = false;
+                const settleResolve = (value) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(value);
+                };
+                const settleReject = (error) => {
+                    if (settled) return;
+                    settled = true;
+                    reject(error);
+                };
+
+                let fullOutput = '';
+                stream.on('data', (data) => {
+                    fullOutput += data.toString();
+                });
+                stream.once('error', (error) => {
+                    settleReject(error);
+                });
+
+                try {
+                    await waitForPrompt(stream, target.type, 5000, 2000);
+
+                    // 自动进入 enable 模式
+                    if ((target.type === 'cisco' || target.type === 'ruijie') && target.enablePassword) {
+                        if (fullOutput.trim().endsWith('>')) {
+                            stream.write('enable\n');
+                            await waitForPrompt(stream, target.type, 5000, 2000);
+                            stream.write(target.enablePassword + '\n');
+                            await waitForPrompt(stream, target.type, 5000, 2000);
+                        }
+                    }
+
+                    // 禁用分页
+                    const pagerCmd = getDisablePagerCommand(target.type);
+                    if (pagerCmd) {
+                        stream.write(pagerCmd + '\n');
+                        await waitForPrompt(stream, target.type, 10000, 2000);
+                    }
+
+                    // 执行命令列表
+                    for (let i = 0; i < commands.length; i++) {
+                        if (state.shouldStop) break;
+                        while (state.paused && !state.shouldStop) {
+                            await delay(500);
+                        }
+
+                        const cmd = replaceVariables(commands[i], target, variables);
+                        stream.write(cmd + '\n');
+                        await waitForPrompt(stream, target.type, cmdTimeout, idleThreshold);
+                    }
+
+                    const exitCmd = getExitCommand(target.type);
+                    stream.write(exitCmd + '\n');
+                    await delay(500);
+                    stream.end();
+
+                    settleResolve(fullOutput);
+                } catch (cmdErr) {
+                    try { stream.end(); } catch (_) {}
+                    settleReject(cmdErr);
+                }
+            });
+        });
+
+        return filterSensitiveOutput(output, target.username, target.password);
+    } finally {
+        try { conn.end(); } catch (_) {}
+    }
 }
 
 /**

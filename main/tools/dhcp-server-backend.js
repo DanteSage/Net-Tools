@@ -177,8 +177,9 @@ class DhcpServerBackend extends EventEmitter {
                         reject(err);
                     }
                     self.log(`DHCP 服务端 Socket 错误: ${err.message}`, 'error');
-                    self.emit('error', err);
-                    self.stop().catch(() => {});
+                    self.stop()
+                        .catch(() => {})
+                        .finally(() => self.emit('server-error', err));
                 };
 
                 this.serverInstance.on('error', errorHandler);
