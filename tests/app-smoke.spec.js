@@ -32,6 +32,9 @@ test.describe('Net Tools app smoke', () => {
         env: { ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
       });
 
+      const electronVersion = await electronApp.evaluate(() => process.versions.electron);
+      expect(electronVersion).toBe('43.1.1');
+
       const mainWindow = await waitForMainWindow(electronApp);
       await mainWindow.waitForLoadState('domcontentloaded', { timeout: 20000 });
       await mainWindow.waitForSelector('.nav-menu', { timeout: 20000 });
@@ -50,7 +53,8 @@ test.describe('Net Tools app smoke', () => {
           && typeof api.ssh?.resize === 'function'
           && typeof api.telnet?.input === 'function'
           && typeof api.telnet?.resize === 'function'
-          && typeof api.serial?.input === 'function';
+          && typeof api.serial?.input === 'function'
+          && typeof api.fs?.getPathForFile === 'function';
       });
       expect(apiAvailable).toBeTruthy();
 

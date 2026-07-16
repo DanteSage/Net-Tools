@@ -15,7 +15,7 @@ Net Tools 是一款面向网络运维与排障场景的 Windows 桌面工具箱�
 ## 环境要求
 
 - Windows 10/11
-- Node.js 18 或更高版本
+- Node.js 22.12 或更高版本
 - npm
 
 部分抓包、DHCP 等底层网络功能可能需要管理员权限。TShark 分析功能需要本机安装 Wireshark/TShark。

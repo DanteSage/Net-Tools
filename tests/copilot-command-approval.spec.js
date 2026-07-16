@@ -1,6 +1,9 @@
+const fs = require('fs');
+const path = require('path');
 const { test, expect } = require('@playwright/test');
 const {
     isCommandPotentiallyWrite,
+    isApprovalGranted,
     executeToolCalls
 } = require('../main/tools/copilot');
 
@@ -30,6 +33,23 @@ function makeEvent() {
 }
 
 test.describe('Copilot command approval policy', () => {
+    test('shows the target device in the approval dialog', () => {
+        const root = path.join(__dirname, '..');
+        const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+        const ui = fs.readFileSync(path.join(root, 'scripts/modules/copilot/copilot-ui.js'), 'utf8');
+
+        expect(html).toContain('id="approval-device-name"');
+        expect(ui).toContain("getElementById('approval-device-name')");
+    });
+
+    test('accepts only the boolean true as approval', () => {
+        expect(isApprovalGranted(true)).toBe(true);
+
+        for (const value of [false, 'true', 'false', 1, {}, [], null, undefined]) {
+            expect(isApprovalGranted(value), String(value)).toBe(false);
+        }
+    });
+
     test('uses a conservative command classification for display only', () => {
         const readOnlyCommands = [
             'show version',
@@ -136,6 +156,29 @@ test.describe('Copilot command approval policy', () => {
         expect(approvals).toBe(1);
         expect(executions).toBe(1);
         expect(toolMessages[0].content).toBe('Cisco IOS');
+    });
+
+    test('does not execute for a truthy non-boolean approval response', async () => {
+        let executions = 0;
+        const { event } = makeEvent();
+
+        const toolMessages = await executeToolCalls(
+            event,
+            [makeToolCall('show version')],
+            'connection-1',
+            'cisco',
+            {
+                context: {},
+                requestUserApproval: async () => 'true',
+                executeCommandOnActiveConnection: async () => {
+                    executions++;
+                    return { success: true, output: 'unexpected' };
+                }
+            }
+        );
+
+        expect(executions).toBe(0);
+        expect(toolMessages[0].content).toBe('Error: Command execution rejected by user.');
     });
 
     test('rejects an empty command before approval or execution', async () => {

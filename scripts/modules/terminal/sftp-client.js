@@ -728,14 +728,14 @@ function initSftpDragAndDrop() {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             
-            // Electron 可以通过 file.path 获取本地绝对路径
-            if (!file.path) continue;
+            const localPath = window.api.fs.getPathForFile(file);
+            if (!localPath) continue;
             
             const filename = file.name;
             const remoteFullPath = session.sftpCurrentPath === '/' ? '/' + filename : session.sftpCurrentPath + '/' + filename;
             
             // 执行上传
-            await executeSftpUpload(session, file.path, remoteFullPath);
+            await executeSftpUpload(session, localPath, remoteFullPath);
         }
     });
 }

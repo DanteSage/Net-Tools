@@ -133,6 +133,10 @@ function isCommandPotentiallyWrite(command, suggestedIsWrite) {
     return !READ_ONLY_COMMAND_PREFIXES.has(firstToken);
 }
 
+function isApprovalGranted(value) {
+    return value === true;
+}
+
 /**
  * 获取屏蔽分页的命令
  */
@@ -501,7 +505,9 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
                 stepErrorType = 'error';
             } else {
                 // 所有 AI 设备命令都必须由用户逐条批准，风险标签不参与授权。
-                const approved = await approvalRequester(executionContext, connectionId, command);
+                const approved = isApprovalGranted(
+                    await approvalRequester(executionContext, connectionId, command)
+                );
 
                 if (approved) {
                     // 执行设备命令
@@ -928,7 +934,7 @@ function registerCopilotHandlers(context) {
         if (pendingApprovals.has(requestId)) {
             const { resolve } = pendingApprovals.get(requestId);
             pendingApprovals.delete(requestId);
-            resolve(approved);
+            resolve(isApprovalGranted(approved));
             return { success: true };
         }
         return { success: false, error: '审批请求已失效或不存在' };
@@ -998,5 +1004,6 @@ function registerCopilotHandlers(context) {
 module.exports = {
     registerCopilotHandlers,
     isCommandPotentiallyWrite,
+    isApprovalGranted,
     executeToolCalls
 };

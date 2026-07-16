@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // 暴露安全的API到渲染进程
 contextBridge.exposeInMainWorld('api', {
@@ -252,7 +252,8 @@ contextBridge.exposeInMainWorld('api', {
     // ==================== 文件系统 ====================
     fs: {
         readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
-        writeFile: (filePath, content) => ipcRenderer.invoke('fs:writeFile', filePath, content)
+        writeFile: (filePath, content) => ipcRenderer.invoke('fs:writeFile', filePath, content),
+        getPathForFile: (file) => webUtils.getPathForFile(file)
     },
 
     // ==================== Shell ====================
