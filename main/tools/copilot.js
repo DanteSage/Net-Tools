@@ -13,6 +13,9 @@ const disabledPagingConnections = new Set();
 let activeHttpRequest = null;
 let isAborted = false;
 
+const READ_ONLY_COMMAND_PREFIXES = new Set(['show', 'display', 'ping', 'traceroute']);
+const UNSAFE_COMMAND_SYNTAX = /[^\S ]|[\u0000-\u001f\u007f;&|><`$\\]/;
+
 // 提示符匹配正则 (支持 Cisco/Ruijie 的 > 或 #，Huawei/H3C 的 ] 或 >，支持接口名中的 / 和 :)
 const PROMPT_REGEX = /(?:[A-Za-z0-9_./:\-]+\s*(\([A-Za-z0-9_./:\-]+\))?\s*[#>]|\[[A-Za-z0-9_./:\-]+\])$/;
 
@@ -32,7 +35,7 @@ const tools = [
                     },
                     is_write_command: {
                         type: 'boolean',
-                        description: '该命令是否会修改设备配置（写入/变更操作）。只读查询类命令（以 show, display, ping, traceroute 等开头）为 false；修改配置类命令（以 configure, system-view, set, undo, no, shutdown 等开头）为 true。'
+                        description: '该命令是否会修改设备配置（写入/变更操作）。只读查询类命令（以 show, display, ping, traceroute 等开头）为 false；修改配置类命令（以 configure, system-view, set, undo, no, shutdown 等开头）为 true；无法确定时必须为 true。'
                     }
                 },
                 required: ['command', 'is_write_command']
@@ -116,32 +119,18 @@ function saveAiConfig(config) {
 }
 
 /**
- * 判定命令是否是写配置操作
+ * 仅用于界面风险标记，不得作为是否需要审批的授权依据。
  */
-function checkIsWriteCommand(command, suggestedIsWrite) {
+function isCommandPotentiallyWrite(command, suggestedIsWrite) {
     if (suggestedIsWrite === true) return true;
-    
+
+    if (typeof command !== 'string') return true;
+
     const cmd = command.trim().toLowerCase();
-    
-    // 如果是只读查询类命令开头，直接判定为非写入配置操作 (即使包含 interface 等配置关键字)
-    const readPrefixes = ['display', 'show', 'ping', 'traceroute', 'check', 'get', 'view', 'dir', 'more'];
-    const isReadPrefix = readPrefixes.some(pref => cmd.startsWith(pref + ' ') || cmd === pref);
-    if (isReadPrefix) return false;
-    
-    // 如果是以下关键词开头，判定为写入/修改配置命令
-    const writeKeywords = [
-        'conf', 'configure', 'sys', 'system-view', 
-        'set', 'undo', 'no', 'shutdown', 'interface', 
-        'ip address', 'router', 'ospf', 'vlan', 
-        'write', 'save', 'delete', 'mkdir', 'rmdir',
-        'reboot', 'reload', 'reset'
-    ];
-    
-    return writeKeywords.some(kw => {
-        if (cmd.startsWith(kw + ' ') || cmd === kw) return true;
-        if (cmd.includes(' ' + kw + ' ')) return true;
-        return false;
-    });
+    if (!cmd || UNSAFE_COMMAND_SYNTAX.test(cmd)) return true;
+
+    const firstToken = cmd.split(/ +/, 1)[0];
+    return !READ_ONLY_COMMAND_PREFIXES.has(firstToken);
 }
 
 /**
@@ -467,7 +456,10 @@ function callLLM(event, messages, systemPrompt, config) {
 /**
  * 批量执行 AI 工具调用命令
  */
-async function executeToolCalls(event, toolCalls, connectionId, deviceType) {
+async function executeToolCalls(event, toolCalls, connectionId, deviceType, dependencies = {}) {
+    const approvalRequester = dependencies.requestUserApproval || requestUserApproval;
+    const commandExecutor = dependencies.executeCommandOnActiveConnection || executeCommandOnActiveConnection;
+    const executionContext = dependencies.context || contextGlobal;
     const toolMessages = [];
     for (const toolCall of toolCalls) {
         if (isAborted) break;
@@ -479,35 +471,41 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType) {
                 args = { command: '', is_write_command: false };
             }
 
-            const command = args.command;
-            const isWrite = checkIsWriteCommand(command, args.is_write_command);
+            if (!args || typeof args !== 'object' || Array.isArray(args)) {
+                args = { command: '', is_write_command: true };
+            }
+
+            const command = typeof args.command === 'string' ? args.command.trim() : '';
+            const isWrite = isCommandPotentiallyWrite(command, args.is_write_command);
 
             // 1. 发送正在执行状态通知前端
             event.sender.send('copilot:agentStep', {
                 status: 'executing',
                 id: toolCall.id,
                 command: command,
-                isWrite: isWrite
+                isWrite,
+                requiresApproval: true
             });
 
             let executeResult = '';
             let stepSuccess = true;
             let stepErrorType = ''; // 'rejected' or 'error'
             
-            if (!connectionId) {
+            if (!command) {
+                executeResult = 'Error: AI returned an empty or invalid command.';
+                stepSuccess = false;
+                stepErrorType = 'error';
+            } else if (!connectionId) {
                 executeResult = 'Error: No active terminal connection selected. Please select a session in the left sidebar.';
                 stepSuccess = false;
                 stepErrorType = 'error';
             } else {
-                let approved = true;
-                if (isWrite) {
-                    // 进入人机审批阻塞逻辑
-                    approved = await requestUserApproval(contextGlobal, connectionId, command);
-                }
+                // 所有 AI 设备命令都必须由用户逐条批准，风险标签不参与授权。
+                const approved = await approvalRequester(executionContext, connectionId, command);
 
                 if (approved) {
                     // 执行设备命令
-                    const runRes = await executeCommandOnActiveConnection(contextGlobal, connectionId, command, deviceType);
+                    const runRes = await commandExecutor(executionContext, connectionId, command, deviceType);
                     if (runRes.success) {
                         executeResult = runRes.output;
                     } else {
@@ -997,4 +995,8 @@ function registerCopilotHandlers(context) {
     });
 }
 
-module.exports = { registerCopilotHandlers };
+module.exports = {
+    registerCopilotHandlers,
+    isCommandPotentiallyWrite,
+    executeToolCalls
+};

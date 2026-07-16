@@ -1304,6 +1304,16 @@ function appendAssistantBubbleToDom(text) {
     scrollChatToBottom();
 }
 
+function isSavedCopilotCommandReadOnly(command) {
+    if (typeof command !== 'string') return false;
+
+    const normalized = command.trim().toLowerCase();
+    if (!normalized || /[^\S ]|[\u0000-\u001f\u007f;&|><`$\\]/.test(normalized)) return false;
+
+    const firstToken = normalized.split(/ +/, 1)[0];
+    return ['show', 'display', 'ping', 'traceroute'].includes(firstToken);
+}
+
 /**
  * 渲染保存下来的 Agent 执行步骤卡片
  */
@@ -1314,20 +1324,7 @@ function appendSavedAgentStep(id, command, toolResponse) {
     stepDiv.className = 'copilot-agent-step-log';
     stepDiv.id = `step-log-${id}`;
 
-    // 判断是否是写指令
-    const cmd = command.trim().toLowerCase();
-    const writeKeywords = [
-        'conf', 'configure', 'sys', 'system-view', 
-        'set', 'undo', 'no', 'shutdown', 'interface', 
-        'ip address', 'router', 'ospf', 'vlan', 
-        'write', 'save', 'delete', 'mkdir', 'rmdir',
-        'reboot', 'reload', 'reset'
-    ];
-    const isWrite = writeKeywords.some(kw => {
-        if (cmd.startsWith(kw + ' ') || cmd === kw) return true;
-        if (cmd.includes(' ' + kw + ' ')) return true;
-        return false;
-    });
+    const isWrite = !isSavedCopilotCommandReadOnly(command);
 
     const logIcon = isWrite ? '⚙️' : '🔍';
     const logType = isWrite ? '配置变更' : '诊断查询';
