@@ -284,11 +284,21 @@ function initCopilot() {
     const rejectBtn = document.getElementById('btn-reject-approval');
     const confirmBtn = document.getElementById('btn-confirm-approval');
 
-    const handleApprovalClose = (approved) => {
+    const handleApprovalClose = async (approved) => {
         if (approvalModal) approvalModal.classList.remove('active');
-        if (currentRequestId) {
-            window.api.copilot.approveResponse(currentRequestId, approved);
-            currentRequestId = null;
+        const requestId = currentRequestId;
+        currentRequestId = null;
+        if (!requestId) return;
+
+        try {
+            const response = await window.api.copilot.approveResponse(requestId, approved);
+            if (approved && !response?.success) {
+                showToast(response?.error || '审批请求已失效，命令未执行', 'warning');
+            }
+        } catch (_) {
+            if (approved) {
+                showToast('审批提交失败，命令未执行', 'error');
+            }
         }
     };
 
@@ -326,6 +336,18 @@ function initCopilot() {
             approvalModal.classList.add('active');
         }
     });
+
+    if (typeof window.api.copilot.onApprovalExpired === 'function') {
+        window.api.copilot.onApprovalExpired(({ requestId, reason }) => {
+            if (!requestId || currentRequestId !== requestId) return;
+
+            currentRequestId = null;
+            if (approvalModal) approvalModal.classList.remove('active');
+            if (reason === 'timeout') {
+                showToast('指令审批已超时，命令未执行', 'warning');
+            }
+        });
+    }
 
     // 监听 Agent 执行状态并展示到聊天气泡中
     window.api.copilot.onAgentStep((step) => {

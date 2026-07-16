@@ -304,4 +304,231 @@ test.describe('Copilot request isolation', () => {
         expect(approvalA.payload.requestId).not.toBe(approvalB.payload.requestId);
         sessionB.abort();
     });
+
+    test('approval timeout rejects execution and invalidates late responses', async () => {
+        const ipcMain = new FakeIpcMain();
+        registerCopilotHandlers({}, { ipcMain });
+        const sender = new FakeSender(9);
+        const session = createCopilotSession(sender);
+        let executions = 0;
+
+        const run = executeToolCalls(
+            { sender },
+            [makeToolCall('show version')],
+            'connection-timeout',
+            'cisco',
+            {
+                context: {},
+                session,
+                approvalOptions: { timeoutMs: 10 },
+                executeCommandOnActiveConnection: async () => {
+                    executions += 1;
+                    return { success: true, output: 'unexpected' };
+                }
+            }
+        );
+        await flushTasks();
+
+        const approval = sender.messages.find(item => item.channel === 'copilot:approveRequest');
+        expect(approval).toBeTruthy();
+        await expect(run).resolves.toEqual([
+            expect.objectContaining({ content: 'Error: Command execution rejected by user.' })
+        ]);
+        expect(executions).toBe(0);
+        expect(session.approvalIds.size).toBe(0);
+        expect(sender.listenerCount('destroyed')).toBe(0);
+        expect(sender.messages).toContainEqual({
+            channel: 'copilot:approvalExpired',
+            payload: { requestId: approval.payload.requestId, reason: 'timeout' }
+        });
+
+        await expect(ipcMain.handlers.get('copilot:approveResponse')(
+            { sender },
+            { requestId: approval.payload.requestId, approved: true }
+        )).resolves.toEqual({ success: false, error: '审批请求已失效或不存在' });
+    });
+
+    test('destroying a fallback window settles approval without a session', async () => {
+        const ipcMain = new FakeIpcMain();
+        registerCopilotHandlers({}, { ipcMain });
+        const sender = new FakeSender(10);
+        let executions = 0;
+        const timer = { unref() {} };
+        const clearedTimers = [];
+        const mainWindow = {
+            webContents: sender,
+            isDestroyed: () => false
+        };
+
+        const run = executeToolCalls(
+            { sender },
+            [makeToolCall('show version')],
+            'connection-fallback',
+            'cisco',
+            {
+                context: { getMainWindow: () => mainWindow },
+                approvalOptions: {
+                    setTimeout: () => timer,
+                    clearTimeout: value => clearedTimers.push(value)
+                },
+                executeCommandOnActiveConnection: async () => {
+                    executions += 1;
+                    return { success: true, output: 'unexpected' };
+                }
+            }
+        );
+        await flushTasks();
+        const approval = sender.messages.find(item => item.channel === 'copilot:approveRequest');
+        sender.destroySender();
+
+        await expect(run).resolves.toEqual([
+            expect.objectContaining({ content: 'Error: Command execution rejected by user.' })
+        ]);
+        expect(executions).toBe(0);
+        expect(clearedTimers).toEqual([timer]);
+        expect(sender.listenerCount('destroyed')).toBe(0);
+        await expect(ipcMain.handlers.get('copilot:approveResponse')(
+            { sender },
+            { requestId: approval.payload.requestId, approved: true }
+        )).resolves.toEqual({ success: false, error: '审批请求已失效或不存在' });
+    });
+
+    test('completed approval clears its timeout and cannot settle twice', async () => {
+        const ipcMain = new FakeIpcMain();
+        registerCopilotHandlers({}, { ipcMain });
+        const sender = new FakeSender(11);
+        const session = createCopilotSession(sender);
+        const timer = { unrefCalls: 0, unref() { this.unrefCalls += 1; } };
+        const clearedTimers = [];
+        let timeoutCallback;
+        let executions = 0;
+
+        const run = executeToolCalls(
+            { sender },
+            [makeToolCall('show version')],
+            'connection-approved',
+            'cisco',
+            {
+                context: {},
+                session,
+                approvalOptions: {
+                    setTimeout: callback => {
+                        timeoutCallback = callback;
+                        return timer;
+                    },
+                    clearTimeout: value => clearedTimers.push(value)
+                },
+                executeCommandOnActiveConnection: async () => {
+                    executions += 1;
+                    return { success: true, output: 'Cisco IOS' };
+                }
+            }
+        );
+        await flushTasks();
+
+        const approval = sender.messages.find(item => item.channel === 'copilot:approveRequest');
+        await expect(ipcMain.handlers.get('copilot:approveResponse')(
+            { sender },
+            { requestId: approval.payload.requestId, approved: true }
+        )).resolves.toEqual({ success: true });
+        await expect(run).resolves.toEqual([
+            expect.objectContaining({ content: 'Cisco IOS' })
+        ]);
+
+        timeoutCallback();
+        await flushTasks();
+        expect(executions).toBe(1);
+        expect(timer.unrefCalls).toBe(1);
+        expect(clearedTimers).toEqual([timer]);
+        expect(session.approvalIds.size).toBe(0);
+        expect(sender.listenerCount('destroyed')).toBe(0);
+        expect(sender.messages.filter(item => item.channel === 'copilot:approvalExpired')).toHaveLength(0);
+    });
+
+    test('aborting a session clears pending approval resources', async () => {
+        const sender = new FakeSender(12);
+        const session = createCopilotSession(sender);
+        const timer = { unref() {} };
+        const clearedTimers = [];
+        let timeoutCallback;
+        let executions = 0;
+
+        const run = executeToolCalls(
+            { sender },
+            [makeToolCall('show version')],
+            'connection-aborted',
+            'cisco',
+            {
+                context: {},
+                session,
+                approvalOptions: {
+                    setTimeout: callback => {
+                        timeoutCallback = callback;
+                        return timer;
+                    },
+                    clearTimeout: value => clearedTimers.push(value)
+                },
+                executeCommandOnActiveConnection: async () => {
+                    executions += 1;
+                    return { success: true, output: 'unexpected' };
+                }
+            }
+        );
+        await flushTasks();
+        expect(session.approvalIds.size).toBe(1);
+        expect(sender.listenerCount('destroyed')).toBe(1);
+
+        session.abort();
+        await expect(run).resolves.toEqual([]);
+        timeoutCallback();
+        await flushTasks();
+
+        expect(executions).toBe(0);
+        expect(clearedTimers).toEqual([timer]);
+        expect(session.approvalIds.size).toBe(0);
+        expect(sender.listenerCount('destroyed')).toBe(0);
+        expect(sender.messages.filter(item => item.channel === 'copilot:approvalExpired')).toEqual([
+            expect.objectContaining({ payload: expect.objectContaining({ reason: 'aborted' }) })
+        ]);
+    });
+
+    test('approval send failure clears pending approval resources', async () => {
+        const sender = new FakeSender(13);
+        const originalSend = sender.send.bind(sender);
+        sender.send = (channel, payload) => {
+            if (channel === 'copilot:approveRequest') throw new Error('sender unavailable');
+            originalSend(channel, payload);
+        };
+        const session = createCopilotSession(sender);
+        const timer = { unref() {} };
+        const clearedTimers = [];
+        let executions = 0;
+
+        const run = executeToolCalls(
+            { sender },
+            [makeToolCall('show version')],
+            'connection-send-failure',
+            'cisco',
+            {
+                context: {},
+                session,
+                approvalOptions: {
+                    setTimeout: () => timer,
+                    clearTimeout: value => clearedTimers.push(value)
+                },
+                executeCommandOnActiveConnection: async () => {
+                    executions += 1;
+                    return { success: true, output: 'unexpected' };
+                }
+            }
+        );
+
+        await expect(run).resolves.toEqual([
+            expect.objectContaining({ content: 'Error: Command execution rejected by user.' })
+        ]);
+        expect(executions).toBe(0);
+        expect(clearedTimers).toEqual([timer]);
+        expect(session.approvalIds.size).toBe(0);
+        expect(sender.listenerCount('destroyed')).toBe(0);
+    });
 });

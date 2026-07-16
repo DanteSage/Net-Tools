@@ -420,6 +420,9 @@ contextBridge.exposeInMainWorld('api', {
         onApproveRequest: (callback) => {
             ipcRenderer.on('copilot:approveRequest', (event, data) => callback(data));
         },
+        onApprovalExpired: (callback) => {
+            ipcRenderer.on('copilot:approvalExpired', (event, data) => callback(data));
+        },
         removeApproveRequestListener: () => {
             ipcRenderer.removeAllListeners('copilot:approveRequest');
         },
@@ -435,6 +438,7 @@ contextBridge.exposeInMainWorld('api', {
             ipcRenderer.removeAllListeners('copilot:error');
             ipcRenderer.removeAllListeners('copilot:generatingReport');
             ipcRenderer.removeAllListeners('copilot:approveRequest');
+            ipcRenderer.removeAllListeners('copilot:approvalExpired');
             ipcRenderer.removeAllListeners('copilot:agentStep');
         }
     },

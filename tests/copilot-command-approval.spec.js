@@ -36,10 +36,17 @@ test.describe('Copilot command approval policy', () => {
     test('shows the target device in the approval dialog', () => {
         const root = path.join(__dirname, '..');
         const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+        const preload = fs.readFileSync(path.join(root, 'preload.js'), 'utf8');
         const ui = fs.readFileSync(path.join(root, 'scripts/modules/copilot/copilot-ui.js'), 'utf8');
 
         expect(html).toContain('id="approval-device-name"');
         expect(ui).toContain("getElementById('approval-device-name')");
+        expect(preload).toContain("ipcRenderer.on('copilot:approvalExpired'");
+        expect(preload).toContain("ipcRenderer.removeAllListeners('copilot:approvalExpired')");
+        expect(ui).toContain('onApprovalExpired');
+        expect(ui).toContain("currentRequestId !== requestId");
+        expect(ui).toContain('await window.api.copilot.approveResponse');
+        expect(ui).toContain("showToast(response?.error || '审批请求已失效，命令未执行'");
     });
 
     test('accepts only the boolean true as approval', () => {

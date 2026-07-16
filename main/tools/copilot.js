@@ -11,6 +11,7 @@ let contextGlobal = null;
 const pendingApprovals = new Map();
 const disabledPagingConnections = new Set();
 const activeCopilotSessions = new Map();
+const COPILOT_APPROVAL_TIMEOUT_MS = 60_000;
 
 const READ_ONLY_COMMAND_PREFIXES = new Set(['show', 'display', 'ping', 'traceroute']);
 const UNSAFE_COMMAND_SYNTAX = /[^\S ]|[\u0000-\u001f\u007f;&|><`$\\]/;
@@ -44,9 +45,37 @@ function settlePendingApproval(requestId, approved) {
 
     pendingApprovals.delete(requestId);
     pending.session?.approvalIds.delete(requestId);
+    if (pending.timer !== null) {
+        try { pending.clearTimeoutFn(pending.timer); } catch (_) {}
+        pending.timer = null;
+    }
+    if (pending.onSenderDestroyed && pending.sender) {
+        try {
+            if (typeof pending.sender.removeListener === 'function') {
+                pending.sender.removeListener('destroyed', pending.onSenderDestroyed);
+            } else if (typeof pending.sender.off === 'function') {
+                pending.sender.off('destroyed', pending.onSenderDestroyed);
+            }
+        } catch (_) {}
+        pending.onSenderDestroyed = null;
+    }
     try {
         pending.resolve(isApprovalGranted(approved));
     } catch (_) {}
+    return true;
+}
+
+function notifyApprovalExpired(sender, requestId, reason) {
+    if (!sender || (typeof sender.isDestroyed === 'function' && sender.isDestroyed())) return;
+    try {
+        sender.send('copilot:approvalExpired', { requestId, reason });
+    } catch (_) {}
+}
+
+function invalidatePendingApproval(requestId, reason) {
+    const sender = pendingApprovals.get(requestId)?.sender;
+    if (!settlePendingApproval(requestId, false)) return false;
+    notifyApprovalExpired(sender, requestId, reason);
     return true;
 }
 
@@ -68,7 +97,7 @@ function createCopilotSession(sender) {
             }
 
             for (const requestId of [...session.approvalIds]) {
-                settlePendingApproval(requestId, false);
+                invalidatePendingApproval(requestId, 'aborted');
             }
         }
     };
@@ -307,7 +336,7 @@ async function executeCommandOnActiveConnection(context, connectionId, command, 
 /**
  * 向渲染进程发送审核指令请求，阻塞并等待用户决策
  */
-function requestUserApproval(context, connectionId, command, session = null) {
+function requestUserApproval(context, connectionId, command, session = null, options = {}) {
     return new Promise((resolve) => {
         if (isCopilotSessionAborted(session)) {
             resolve(false);
@@ -317,8 +346,17 @@ function requestUserApproval(context, connectionId, command, session = null) {
         const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         let sender = session?.sender || null;
         if (!sender) {
-            const mainWindow = context.getMainWindow();
-            sender = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
+            try {
+                const mainWindow = typeof context?.getMainWindow === 'function'
+                    ? context.getMainWindow()
+                    : null;
+                const mainWindowDestroyed = mainWindow
+                    && typeof mainWindow.isDestroyed === 'function'
+                    && mainWindow.isDestroyed();
+                sender = mainWindow && !mainWindowDestroyed ? mainWindow.webContents : null;
+            } catch (_) {
+                sender = null;
+            }
         }
 
         if (!sender || (typeof sender.isDestroyed === 'function' && sender.isDestroyed())) {
@@ -326,8 +364,56 @@ function requestUserApproval(context, connectionId, command, session = null) {
             return;
         }
 
-        pendingApprovals.set(requestId, { resolve, session, sender });
+        const approvalOptions = options && typeof options === 'object' ? options : {};
+        const timeoutMs = Number.isFinite(approvalOptions.timeoutMs) && approvalOptions.timeoutMs > 0
+            ? Math.max(1, Math.floor(approvalOptions.timeoutMs))
+            : COPILOT_APPROVAL_TIMEOUT_MS;
+        const setTimeoutFn = typeof approvalOptions.setTimeout === 'function'
+            ? approvalOptions.setTimeout
+            : setTimeout;
+        const clearTimeoutFn = typeof approvalOptions.clearTimeout === 'function'
+            ? approvalOptions.clearTimeout
+            : clearTimeout;
+        const pending = {
+            resolve,
+            session,
+            sender,
+            timer: null,
+            clearTimeoutFn,
+            onSenderDestroyed: null
+        };
+        const onSenderDestroyed = () => {
+            settlePendingApproval(requestId, false);
+        };
+        pending.onSenderDestroyed = onSenderDestroyed;
+        pendingApprovals.set(requestId, pending);
         session?.approvalIds.add(requestId);
+
+        if (typeof sender.once === 'function') {
+            try {
+                sender.once('destroyed', onSenderDestroyed);
+            } catch (_) {
+                settlePendingApproval(requestId, false);
+                return;
+            }
+        }
+
+        // The sender may have been destroyed between the initial check and listener registration.
+        if ((typeof sender.isDestroyed === 'function' && sender.isDestroyed())
+            || !pendingApprovals.has(requestId)) {
+            settlePendingApproval(requestId, false);
+            return;
+        }
+
+        try {
+            pending.timer = setTimeoutFn(() => {
+                invalidatePendingApproval(requestId, 'timeout');
+            }, timeoutMs);
+            pending.timer?.unref?.();
+        } catch (_) {
+            settlePendingApproval(requestId, false);
+            return;
+        }
 
         try {
             sender.send('copilot:approveRequest', {
@@ -584,6 +670,7 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
     const commandExecutor = dependencies.executeCommandOnActiveConnection || executeCommandOnActiveConnection;
     const executionContext = dependencies.context || contextGlobal;
     const session = dependencies.session || null;
+    const approvalOptions = dependencies.approvalOptions || {};
     const toolMessages = [];
     for (const toolCall of toolCalls) {
         if (isCopilotSessionAborted(session)) break;
@@ -626,7 +713,7 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
             } else {
                 // 所有 AI 设备命令都必须由用户逐条批准，风险标签不参与授权。
                 const approved = isApprovalGranted(
-                    await approvalRequester(executionContext, connectionId, command, session)
+                    await approvalRequester(executionContext, connectionId, command, session, approvalOptions)
                 );
 
                 if (isCopilotSessionAborted(session)) break;
