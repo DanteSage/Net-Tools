@@ -1,0 +1,862 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - generic [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - link "Home" [ref=f1e8] [cursor=pointer]:
+          - /url: /
+        - button "Select version of library" [ref=f1e12]: v4.3
+      - generic [ref=f1e15]:
+        - button "Ctrl K" [ref=f1e16]
+        - link "Docs" [ref=f1e20] [cursor=pointer]:
+          - /url: /docs
+        - link "Blog" [ref=f1e21] [cursor=pointer]:
+          - /url: /blog
+        - link "Showcase" [ref=f1e22] [cursor=pointer]:
+          - /url: /showcase
+        - link "Partners" [ref=f1e23] [cursor=pointer]:
+          - /url: /partners
+        - link "Plus" [ref=f1e24] [cursor=pointer]:
+          - /url: /plus?ref=top
+        - link "GitHub repository" [ref=f1e34] [cursor=pointer]:
+          - /url: https://github.com/tailwindlabs/tailwindcss
+    - generic [ref=f1e40]:
+      - generic [ref=f1e41]:
+        - time [ref=f1e43]: January 22, 2025
+        - heading "Tailwind CSS v4.0" [level=1] [ref=f1e45]
+      - generic [ref=f1e50]:
+        - generic [ref=f1e51]: Adam Wathan
+        - link "@adamwathan" [ref=f1e53] [cursor=pointer]:
+          - /url: https://twitter.com/adamwathan
+      - generic [ref=f1e54]:
+        - article [ref=f1e56]:
+          - img "Tailwind CSS v4.0" [ref=f1e59]
+          - paragraph [ref=f1e60]: Holy shit it's actually done — we just tagged Tailwind CSS v4.0.
+          - paragraph [ref=f1e61]: Tailwind CSS v4.0 is an all-new version of the framework optimized for performance and flexibility, with a reimagined configuration and customization experience, and taking full advantage of the latest advancements the web platform has to offer.
+          - list [ref=f1e62]:
+            - listitem [ref=f1e63]:
+              - link "New high-performance engine" [ref=f1e64] [cursor=pointer]:
+                - /url: "#new-high-performance-engine"
+              - text: — where full builds are up to 5x faster, and incremental builds are over 100x faster — and measured in microseconds.
+            - listitem [ref=f1e65]:
+              - link "Designed for the modern web" [ref=f1e66] [cursor=pointer]:
+                - /url: "#designed-for-the-modern-web"
+              - text: — built on cutting-edge CSS features like cascade layers, registered custom properties with
+              - code [ref=f1e67]: "`@property`"
+              - text: ", and"
+              - code [ref=f1e68]: "`color-mix()`"
+              - text: .
+            - listitem [ref=f1e69]:
+              - link "Simplified installation" [ref=f1e70] [cursor=pointer]:
+                - /url: "#simplified-installation"
+              - text: — fewer dependencies, zero configuration, and just a single line of code in your CSS file.
+            - listitem [ref=f1e71]:
+              - link "First-party Vite plugin" [ref=f1e72] [cursor=pointer]:
+                - /url: "#first-party-vite-plugin"
+              - text: — tight integration for maximum performance and minimum configuration.
+            - listitem [ref=f1e73]:
+              - link "Automatic content detection" [ref=f1e74] [cursor=pointer]:
+                - /url: "#automatic-content-detection"
+              - text: — all of your template files are discovered automatically, with no configuration required.
+            - listitem [ref=f1e75]:
+              - link "Built-in import support" [ref=f1e76] [cursor=pointer]:
+                - /url: "#built-in-import-support"
+              - text: — no additional tooling necessary to bundle multiple CSS files.
+            - listitem [ref=f1e77]:
+              - link "CSS-first configuration" [ref=f1e78] [cursor=pointer]:
+                - /url: "#css-first-configuration"
+              - text: — a reimagined developer experience where you customize and extend the framework directly in CSS instead of a JavaScript configuration file.
+            - listitem [ref=f1e79]:
+              - link "CSS theme variables" [ref=f1e80] [cursor=pointer]:
+                - /url: "#css-theme-variables"
+              - text: — all of your design tokens exposed as native CSS variables so you can access them anywhere.
+            - listitem [ref=f1e81]:
+              - link "Dynamic utility values and variants" [ref=f1e82] [cursor=pointer]:
+                - /url: "#dynamic-utility-values-and-variants"
+              - text: — stop guessing what values exist in your spacing scale, or extending your configuration for things like basic data attributes.
+            - listitem [ref=f1e83]:
+              - link "Modernized P3 color palette" [ref=f1e84] [cursor=pointer]:
+                - /url: "#modernized-p3-color-palette"
+              - text: — a redesigned, more vivid color palette that takes full advantage of modern display technology.
+            - listitem [ref=f1e85]:
+              - link "Container queries" [ref=f1e86] [cursor=pointer]:
+                - /url: "#container-queries"
+              - text: — first-class APIs for styling elements based on their container size, no plugins required.
+            - listitem [ref=f1e87]:
+              - link "New 3D transform utilities" [ref=f1e88] [cursor=pointer]:
+                - /url: "#new-3d-transform-utilities"
+              - text: — transform elements in 3D space directly in your HTML.
+            - listitem [ref=f1e89]:
+              - link "Expanded gradient APIs" [ref=f1e90] [cursor=pointer]:
+                - /url: "#expanded-gradient-apis"
+              - text: — radial and conic gradients, interpolation modes, and more.
+            - listitem [ref=f1e91]:
+              - link "@starting-style support" [ref=f1e92] [cursor=pointer]:
+                - /url: "#starting-style-support"
+              - text: — a new variant you can use to create enter and exit transitions, without the need for JavaScript.
+            - listitem [ref=f1e93]:
+              - link "not-* variant" [ref=f1e94] [cursor=pointer]:
+                - /url: "#not-variant"
+              - text: — style an element only when it doesn't match another variant, custom selector, or media or feature query.
+            - listitem [ref=f1e95]:
+              - link "Even more new utilities and variants" [ref=f1e96] [cursor=pointer]:
+                - /url: "#even-more-new-utilities-and-variants"
+              - text: — including support for
+              - code [ref=f1e97]: "`color-scheme`"
+              - text: ","
+              - code [ref=f1e98]: "`field-sizing`"
+              - text: ", complex shadows,"
+              - code [ref=f1e99]: "`inert`"
+              - text: ", and more."
+          - paragraph [ref=f1e100]:
+            - text: Start using Tailwind CSS v4.0 today by
+            - link "installing it in a new project" [ref=f1e101] [cursor=pointer]:
+              - /url: /docs/installation
+            - text: ", or playing with it directly in the browser on"
+            - link "Tailwind Play" [ref=f1e102] [cursor=pointer]:
+              - /url: https://play.tailwindcss.com/
+            - text: .
+          - paragraph [ref=f1e103]:
+            - text: For existing projects, we've published a comprehensive
+            - link "upgrade guide" [ref=f1e104] [cursor=pointer]:
+              - /url: /docs/upgrade-guide
+            - text: and built an
+            - link "automated upgrade tool" [ref=f1e105] [cursor=pointer]:
+              - /url: /docs/upgrade-guide#using-the-upgrade-tool
+            - text: to get you on the latest version as quickly and painlessly as possible.
+          - separator [ref=f1e106]
+          - heading [level=2] [ref=f1e107]:
+            - link "New high-performance engine" [ref=f1e108] [cursor=pointer]:
+              - /url: "#new-high-performance-engine"
+          - paragraph [ref=f1e109]: Tailwind CSS v4.0 is a ground-up rewrite of the framework, taking everything we've learned about the architecture over the years and optimizing it to be as fast as possible.
+          - paragraph [ref=f1e110]: When benchmarking it on our own projects, we've found full rebuilds to be over 3.5x faster, and incremental builds to be over 8x faster.
+          - paragraph [ref=f1e111]:
+            - text: Here are the median build times we saw when we benchmarked Tailwind CSS v4.0 against
+            - link "Catalyst" [ref=f1e112] [cursor=pointer]:
+              - /url: https://tailwindui.com/templates/catalyst
+            - text: ":"
+          - table [ref=f1e113]:
+            - rowgroup [ref=f1e114]:
+              - row [ref=f1e115]:
+                - columnheader [ref=f1e116]
+                - columnheader "v3.4" [ref=f1e117]
+                - columnheader "v4.0" [ref=f1e118]
+                - columnheader "Improvement" [ref=f1e119]
+            - rowgroup [ref=f1e120]:
+              - row [ref=f1e121]:
+                - cell "Full build" [ref=f1e122]
+                - cell "378ms" [ref=f1e123]
+                - cell "100ms" [ref=f1e124]
+                - cell "3.78x" [ref=f1e125]
+              - row [ref=f1e126]:
+                - cell "Incremental rebuild with new CSS" [ref=f1e127]
+                - cell "44ms" [ref=f1e128]
+                - cell "5ms" [ref=f1e129]
+                - cell "8.8x" [ref=f1e130]
+              - row [ref=f1e131]:
+                - cell "Incremental rebuild with no new CSS" [ref=f1e132]
+                - cell "35ms" [ref=f1e133]
+                - cell "192µs" [ref=f1e134]
+                - cell "182x" [ref=f1e135]
+          - paragraph [ref=f1e136]:
+            - text: The most impressive improvement is on incremental builds that don't actually need to compile any new CSS — these builds are over 100x faster and complete in
+            - emphasis [ref=f1e137]: microseconds
+            - text: . And the longer you work on a project, the more of these builds you run into because you're just using classes you've already used before, like
+            - code [ref=f1e138]: "`flex`"
+            - text: ","
+            - code [ref=f1e139]: "`col-span-2`"
+            - text: ", or"
+            - code [ref=f1e140]: "`font-bold`"
+            - text: .
+          - separator [ref=f1e141]
+          - heading [level=2] [ref=f1e142]:
+            - link "Designed for the modern web" [ref=f1e143] [cursor=pointer]:
+              - /url: "#designed-for-the-modern-web"
+          - paragraph [ref=f1e144]: The platform has evolved a lot since we released Tailwind CSS v3.0, and v4.0 takes full advantage of many of these improvements.
+          - generic [ref=f1e147]:
+            - generic [ref=f1e148]: CSS
+            - code [ref=f1e152]:
+              - generic [ref=f1e153]: "@layer theme, base, components, utilities;"
+              - generic [ref=f1e155]: "@layer utilities {"
+              - generic [ref=f1e156]: ".mx-6 {"
+              - generic [ref=f1e157]: "margin-inline: calc(var(--spacing) * 6);"
+              - generic [ref=f1e158]: "}"
+              - generic [ref=f1e159]: ".bg-blue-500\\/50 {"
+              - generic [ref=f1e160]: "background-color: color-mix(in oklab, var(--color-blue-500) 50%, transparent);"
+              - generic [ref=f1e161]: "}"
+              - generic [ref=f1e162]: "}"
+              - generic [ref=f1e164]: "@property --tw-gradient-from {"
+              - generic [ref=f1e165]: "syntax: \"<color>\";"
+              - generic [ref=f1e166]: "inherits: false;"
+              - generic [ref=f1e167]: "initial-value: #0000;"
+              - generic [ref=f1e168]: "}"
+          - paragraph [ref=f1e169]: "We're leveraging modern CSS features like:"
+          - list [ref=f1e170]:
+            - listitem [ref=f1e171]:
+              - strong [ref=f1e172]: Native cascade layers
+              - text: — giving us more control than ever over how different style rules interact with each other.
+            - listitem [ref=f1e173]:
+              - strong [ref=f1e174]: Registered custom properties
+              - text: — making it possible to do things like animate gradients, and significantly improving performance on large pages.
+            - listitem [ref=f1e175]:
+              - strong [ref=f1e176]: color-mix()
+              - text: — which lets us adjust the opacity of any color value, including CSS variables and
+              - code [ref=f1e177]: "`currentColor`"
+              - text: .
+            - listitem [ref=f1e178]:
+              - strong [ref=f1e179]: Logical properties
+              - text: — simplifying RTL support and reducing the size of your generated CSS.
+          - paragraph [ref=f1e180]: Many of these features have even simplified Tailwind internally, reducing the surface area for bugs and making the framework easier for us to maintain.
+          - separator [ref=f1e181]
+          - heading [level=2] [ref=f1e182]:
+            - link "Simplified installation" [ref=f1e183] [cursor=pointer]:
+              - /url: "#simplified-installation"
+          - paragraph [ref=f1e184]: We've streamlined the setup process a ton in v4.0, reducing the number of steps and removing a lot of boilerplate.
+          - generic [ref=f1e186]:
+            - generic [ref=f1e189]:
+              - generic [ref=f1e190]: 1. Install Tailwind CSS
+              - code [ref=f1e194]:
+                - generic [ref=f1e195]: npm i tailwindcss @tailwindcss/postcss;
+            - generic [ref=f1e198]:
+              - generic [ref=f1e199]: 2. Add the PostCSS plugin
+              - code [ref=f1e203]:
+                - generic [ref=f1e204]: "export default {"
+                - generic [ref=f1e205]: "plugins: [\"@tailwindcss/postcss\"],"
+                - generic [ref=f1e206]: "};"
+            - generic [ref=f1e209]:
+              - generic [ref=f1e210]: 3. Import Tailwind in your CSS
+              - code [ref=f1e214]:
+                - generic [ref=f1e215]: "@import \"tailwindcss\";"
+          - paragraph [ref=f1e216]: "With the improvements we've made to this process for v4.0, Tailwind feels more light-weight than ever:"
+          - list [ref=f1e217]:
+            - listitem [ref=f1e218]:
+              - strong [ref=f1e219]: Just one-line of CSS
+              - text: — no more
+              - code [ref=f1e220]: "`@tailwind`"
+              - text: directives, just add
+              - code [ref=f1e221]: "`@import \"tailwindcss\"`"
+              - text: and start building.
+            - listitem [ref=f1e222]:
+              - strong [ref=f1e223]: Zero configuration
+              - text: — you can start using the framework without configuring anything, not even the paths to your template files.
+            - listitem [ref=f1e224]:
+              - strong [ref=f1e225]: No external plugins required
+              - text: — we bundle
+              - code [ref=f1e226]: "`@import`"
+              - text: rules for you out of the box, and use
+              - link "Lightning CSS" [ref=f1e227] [cursor=pointer]:
+                - /url: https://lightningcss.dev/
+              - text: under the hood for vendor prefixing and modern syntax transforms.
+          - paragraph [ref=f1e228]: Sure you only go through this once per project, but it adds up when you're starting and abandoning a different side-project every weekend.
+          - heading [level=2] [ref=f1e229]:
+            - link "First-party Vite plugin" [ref=f1e230] [cursor=pointer]:
+              - /url: "#first-party-vite-plugin"
+          - paragraph [ref=f1e231]:
+            - text: If you're a Vite user, you can now integrate Tailwind using
+            - link [ref=f1e232] [cursor=pointer]:
+              - /url: /docs/installation/using-vite
+              - code [ref=f1e233]: "`@tailwindcss/vite`"
+            - text: "instead of PostCSS:"
+          - generic [ref=f1e236]:
+            - generic [ref=f1e237]: vite.config.ts
+            - code [ref=f1e241]:
+              - generic [ref=f1e242]: "import { defineConfig } from \"vite\";"
+              - generic [ref=f1e243]: import tailwindcss from "@tailwindcss/vite";
+              - generic [ref=f1e245]: "export default defineConfig({"
+              - generic [ref=f1e246]: "plugins: ["
+              - generic [ref=f1e247]: tailwindcss(),
+              - generic [ref=f1e248]: "],"
+              - generic [ref=f1e249]: "});"
+          - paragraph [ref=f1e250]: Tailwind CSS v4.0 is incredibly fast when used as a PostCSS plugin, but you'll get even better performance using the Vite plugin.
+          - heading [level=2] [ref=f1e251]:
+            - link "Automatic content detection" [ref=f1e252] [cursor=pointer]:
+              - /url: "#automatic-content-detection"
+          - paragraph [ref=f1e253]:
+            - text: You know how you always had to configure that annoying
+            - code [ref=f1e254]: "`content`"
+            - text: array in Tailwind CSS v3? In v4.0, we came up with a bunch of heuristics for detecting all of that stuff automatically so you don’t have to configure it at all.
+          - paragraph [ref=f1e255]:
+            - text: For example, we automatically ignore anything in your
+            - code [ref=f1e256]: "`.gitignore`"
+            - text: "file to avoid scanning dependencies or generated files that aren’t under version control:"
+          - generic [ref=f1e259]:
+            - generic [ref=f1e260]: .gitignore
+            - code [ref=f1e264]:
+              - generic [ref=f1e265]: /node_modules
+              - generic [ref=f1e266]: /coverage
+              - generic [ref=f1e267]: /.next/
+              - generic [ref=f1e268]: /build
+          - paragraph [ref=f1e269]: We also automatically ignore all binary extensions like images, videos, .zip files, and more.
+          - paragraph [ref=f1e270]:
+            - text: And if you ever need to explicitly add a source that's excluded by default, you can always add it with the
+            - code [ref=f1e271]: "`@source`"
+            - text: "directive, right in your CSS file:"
+          - generic [ref=f1e274]:
+            - generic [ref=f1e275]: CSS
+            - code [ref=f1e279]:
+              - generic [ref=f1e280]: "@import \"tailwindcss\";"
+              - generic [ref=f1e281]: "@source \"../node_modules/@my-company/ui-lib\";"
+          - paragraph [ref=f1e282]:
+            - text: The
+            - code [ref=f1e283]: "`@source`"
+            - text: directive uses the same heuristics under the hood, so it will exclude binary file types for example as well, without you having to specify all of the extensions to scan explicitly.
+          - paragraph [ref=f1e284]:
+            - text: Learn more about in our new documentation on
+            - link "detecting classes in source files" [ref=f1e285] [cursor=pointer]:
+              - /url: /docs/detecting-classes-in-source-files
+            - text: .
+          - separator [ref=f1e286]
+          - heading [level=2] [ref=f1e287]:
+            - link "Built-in import support" [ref=f1e288] [cursor=pointer]:
+              - /url: "#built-in-import-support"
+          - paragraph [ref=f1e289]:
+            - text: Before v4.0, if you wanted to inline other CSS files using
+            - code [ref=f1e290]: "`@import`"
+            - text: you'd have to configure another plugin like
+            - code [ref=f1e291]: "`postcss-import`"
+            - text: to handle it for you.
+          - paragraph [ref=f1e292]: "Now we handle this out of the box, so you don't need any other tools:"
+          - generic [ref=f1e295]:
+            - generic [ref=f1e296]: postcss.config.js
+            - code [ref=f1e300]:
+              - generic [ref=f1e301]: "export default {"
+              - generic [ref=f1e302]: "plugins: ["
+              - generic [ref=f1e303]: "- \"postcss-import\","
+              - generic [ref=f1e304]: "\"@tailwindcss/postcss\","
+              - generic [ref=f1e305]: "],"
+              - generic [ref=f1e306]: "};"
+          - paragraph [ref=f1e307]: Our import system is purpose-built for Tailwind CSS, so we've also been able to make it even faster by tightly integrating it with our engine.
+          - separator [ref=f1e308]
+          - heading [level=2] [ref=f1e309]:
+            - link "CSS-first configuration" [ref=f1e310] [cursor=pointer]:
+              - /url: "#css-first-configuration"
+          - paragraph [ref=f1e311]: One of the biggest changes in Tailwind CSS v4.0 is the shift from configuring your project in JavaScript to configuring it in CSS.
+          - paragraph [ref=f1e312]:
+            - text: Instead of a
+            - code [ref=f1e313]: "`tailwind.config.js`"
+            - text: "file, you can configure all of your customizations directly in the CSS file where you import Tailwind, giving you one less file to worry about in your project:"
+          - generic [ref=f1e316]:
+            - generic [ref=f1e317]: CSS
+            - code [ref=f1e321]:
+              - generic [ref=f1e322]: "@import \"tailwindcss\";"
+              - generic [ref=f1e324]: "@theme {"
+              - generic [ref=f1e325]: "--font-display: \"Satoshi\", \"sans-serif\";"
+              - generic [ref=f1e327]: "--breakpoint-3xl: 1920px;"
+              - generic [ref=f1e329]: "--color-avocado-100: oklch(0.99 0 0);"
+              - generic [ref=f1e330]: "--color-avocado-200: oklch(0.98 0.04 113.22);"
+              - generic [ref=f1e331]: "--color-avocado-300: oklch(0.94 0.11 115.03);"
+              - generic [ref=f1e332]: "--color-avocado-400: oklch(0.92 0.19 114.08);"
+              - generic [ref=f1e333]: "--color-avocado-500: oklch(0.84 0.18 117.33);"
+              - generic [ref=f1e334]: "--color-avocado-600: oklch(0.53 0.12 118.34);"
+              - generic [ref=f1e336]: "--ease-fluid: cubic-bezier(0.3, 0, 0, 1);"
+              - generic [ref=f1e337]: "--ease-snappy: cubic-bezier(0.2, 0, 0, 1);"
+              - generic [ref=f1e339]: /* ... */
+              - generic [ref=f1e340]: "}"
+          - paragraph [ref=f1e341]:
+            - text: The new CSS-first configuration lets you do just about everything you could do in your
+            - code [ref=f1e342]: "`tailwind.config.js`"
+            - text: file, including configuring your design tokens, defining custom utilities and variants, and more.
+          - paragraph [ref=f1e343]:
+            - text: To learn more about how it all works, read the new
+            - link "theme variables" [ref=f1e344] [cursor=pointer]:
+              - /url: /docs/theme
+            - text: documentation.
+          - separator [ref=f1e345]
+          - heading [level=2] [ref=f1e346]:
+            - link "CSS theme variables" [ref=f1e347] [cursor=pointer]:
+              - /url: "#css-theme-variables"
+          - paragraph [ref=f1e348]: Tailwind CSS v4.0 takes all of your design tokens and makes them available as CSS variables by default, so you can reference any value you need at run-time using just CSS.
+          - paragraph [ref=f1e349]:
+            - text: Using the example
+            - code [ref=f1e350]: "`@theme`"
+            - text: "from earlier, all of these values will be added to your CSS to as regular custom properties:"
+          - generic [ref=f1e353]:
+            - generic [ref=f1e354]: Generated CSS
+            - code [ref=f1e358]:
+              - generic [ref=f1e359]: ":root {"
+              - generic [ref=f1e360]: "--font-display: \"Satoshi\", \"sans-serif\";"
+              - generic [ref=f1e362]: "--breakpoint-3xl: 1920px;"
+              - generic [ref=f1e364]: "--color-avocado-100: oklch(0.99 0 0);"
+              - generic [ref=f1e365]: "--color-avocado-200: oklch(0.98 0.04 113.22);"
+              - generic [ref=f1e366]: "--color-avocado-300: oklch(0.94 0.11 115.03);"
+              - generic [ref=f1e367]: "--color-avocado-400: oklch(0.92 0.19 114.08);"
+              - generic [ref=f1e368]: "--color-avocado-500: oklch(0.84 0.18 117.33);"
+              - generic [ref=f1e369]: "--color-avocado-600: oklch(0.53 0.12 118.34);"
+              - generic [ref=f1e371]: "--ease-fluid: cubic-bezier(0.3, 0, 0, 1);"
+              - generic [ref=f1e372]: "--ease-snappy: cubic-bezier(0.2, 0, 0, 1);"
+              - generic [ref=f1e374]: /* ... */
+              - generic [ref=f1e375]: "}"
+          - paragraph [ref=f1e376]:
+            - text: This makes it easy to reuse these values as inline styles or pass them to libraries like
+            - link "Motion" [ref=f1e377] [cursor=pointer]:
+              - /url: https://motion.dev/docs/react-animation#css-variables
+            - text: to animate them.
+          - separator [ref=f1e378]
+          - heading [level=2] [ref=f1e379]:
+            - link "Dynamic utility values and variants" [ref=f1e380] [cursor=pointer]:
+              - /url: "#dynamic-utility-values-and-variants"
+          - paragraph [ref=f1e381]:
+            - text: We've simplified the way many utilities and variants work in v4.0 by effectively allowing them to accept certain types of arbitrary values,
+            - emphasis [ref=f1e382]: without
+            - text: the need for any configuration or dropping down to the arbitrary value syntax.
+          - paragraph [ref=f1e383]: "For example, in Tailwind CSS v4.0 you can create grids of any size out of the box:"
+          - generic [ref=f1e386]:
+            - generic [ref=f1e387]: HTML
+            - code [ref=f1e391]:
+              - generic [ref=f1e392]: <div class="grid grid-cols-15">
+              - generic [ref=f1e393]: <!-- ... -->
+              - generic [ref=f1e394]: </div>
+          - paragraph [ref=f1e395]: "You can also target custom boolean data attributes without needing to define them:"
+          - generic [ref=f1e398]:
+            - generic [ref=f1e399]: HTML
+            - code [ref=f1e403]:
+              - generic [ref=f1e404]: <div data-current class="opacity-75 data-current:opacity-100">
+              - generic [ref=f1e405]: <!-- ... -->
+              - generic [ref=f1e406]: </div>
+          - paragraph [ref=f1e407]:
+            - text: Even spacing utilities like
+            - code [ref=f1e408]: "`px-*`"
+            - text: ","
+            - code [ref=f1e409]: "`mt-*`"
+            - text: ","
+            - code [ref=f1e410]: "`w-*`"
+            - text: ","
+            - code [ref=f1e411]: "`h-*`"
+            - text: ", and more are now dynamically derived from a single spacing scale variable and accept any value out of the box:"
+          - generic [ref=f1e414]:
+            - generic [ref=f1e415]: Generated CSS
+            - code [ref=f1e419]:
+              - generic [ref=f1e420]: "@layer theme {"
+              - generic [ref=f1e421]: ":root {"
+              - generic [ref=f1e422]: "--spacing: 0.25rem;"
+              - generic [ref=f1e423]: "}"
+              - generic [ref=f1e424]: "}"
+              - generic [ref=f1e426]: "@layer utilities {"
+              - generic [ref=f1e427]: ".mt-8 {"
+              - generic [ref=f1e428]: "margin-top: calc(var(--spacing) * 8);"
+              - generic [ref=f1e429]: "}"
+              - generic [ref=f1e430]: ".w-17 {"
+              - generic [ref=f1e431]: "width: calc(var(--spacing) * 17);"
+              - generic [ref=f1e432]: "}"
+              - generic [ref=f1e433]: ".pr-29 {"
+              - generic [ref=f1e434]: "padding-right: calc(var(--spacing) * 29);"
+              - generic [ref=f1e435]: "}"
+              - generic [ref=f1e436]: "}"
+          - paragraph [ref=f1e437]: The upgrade tool we released alongside v4.0 will even simplify most of these utilities for you automatically if it notices you using an arbitrary value that's no longer needed.
+          - separator [ref=f1e438]
+          - heading [level=2] [ref=f1e439]:
+            - link "Modernized P3 color palette" [ref=f1e440] [cursor=pointer]:
+              - /url: "#modernized-p3-color-palette"
+          - paragraph [ref=f1e441]:
+            - text: We've upgraded the entire default color palette from
+            - code [ref=f1e442]: "`rgb`"
+            - text: to
+            - code [ref=f1e443]: "`oklch`"
+            - text: ", taking advantage of the wider gamut to make the colors more vivid in places where we were previously limited by the sRGB color space."
+          - paragraph [ref=f1e650]: We've tried to keep the balance between all the colors the same as it was in v3, so even though we've refreshed things across the board, it shouldn't feel like a breaking change when upgrading your existing projects.
+          - separator [ref=f1e651]
+          - heading [level=2] [ref=f1e652]:
+            - link "Container queries" [ref=f1e653] [cursor=pointer]:
+              - /url: "#container-queries"
+          - paragraph [ref=f1e654]:
+            - text: We've brought container query support into core for v4.0, so you don't need the
+            - code [ref=f1e655]: "`@tailwindcss/container-queries`"
+            - text: "plugin anymore:"
+          - generic [ref=f1e658]:
+            - generic [ref=f1e659]: HTML
+            - code [ref=f1e663]:
+              - generic [ref=f1e664]: <div class=" @container">
+              - generic [ref=f1e665]: <div class="grid grid-cols-1 @sm:grid-cols-3 @lg:grid-cols-4">
+              - generic [ref=f1e666]: <!-- ... -->
+              - generic [ref=f1e667]: </div>
+              - generic [ref=f1e668]: </div>
+          - paragraph [ref=f1e669]:
+            - text: We've also added support for max-width container queries using the new
+            - code [ref=f1e670]: "`@max-*`"
+            - text: "variant:"
+          - generic [ref=f1e673]:
+            - generic [ref=f1e674]: HTML
+            - code [ref=f1e678]:
+              - generic [ref=f1e679]: <div class=" @container">
+              - generic [ref=f1e680]: <div class="grid grid-cols-3 @max-md:grid-cols-1">
+              - generic [ref=f1e681]: <!-- ... -->
+              - generic [ref=f1e682]: </div>
+              - generic [ref=f1e683]: </div>
+          - paragraph [ref=f1e684]:
+            - text: Like our regular breakpoint variants, you can also stack
+            - code [ref=f1e685]: "`@min-*`"
+            - text: and
+            - code [ref=f1e686]: "`@max-*`"
+            - text: "variants to define container query ranges:"
+          - generic [ref=f1e689]:
+            - generic [ref=f1e690]: HTML
+            - code [ref=f1e694]:
+              - generic [ref=f1e695]: <div class=" @container">
+              - generic [ref=f1e696]: <div class="flex @min-md:@max-xl:hidden">
+              - generic [ref=f1e697]: <!-- ... -->
+              - generic [ref=f1e698]: </div>
+              - generic [ref=f1e699]: </div>
+          - paragraph [ref=f1e700]:
+            - text: Learn more in our all-new
+            - link "container queries" [ref=f1e701] [cursor=pointer]:
+              - /url: /docs/responsive-design#container-queries
+            - text: documentation.
+          - separator [ref=f1e702]
+          - heading [level=2] [ref=f1e703]:
+            - link "New 3D transform utilities" [ref=f1e704] [cursor=pointer]:
+              - /url: "#new-3d-transform-utilities"
+          - paragraph [ref=f1e705]:
+            - text: We've finally added APIs for doing 3D transforms, like
+            - code [ref=f1e706]: "`rotate-x-*`"
+            - text: ","
+            - code [ref=f1e707]: "`rotate-y-*`"
+            - text: ","
+            - code [ref=f1e708]: "`scale-z-*`"
+            - text: ","
+            - code [ref=f1e709]: "`translate-z-*`"
+            - text: ", and tons more."
+          - figure [ref=f1e712]:
+            - article [ref=f1e715]:
+              - generic [ref=f1e718]:
+                - time [ref=f1e719]: Mar 16, 2020
+                - generic [ref=f1e720]: Michael Foster
+              - paragraph [ref=f1e724]: Boost your conversion rate
+            - code [ref=f1e731]:
+              - generic [ref=f1e732]: <div class=" perspective-distant">
+              - generic [ref=f1e733]: <article class=" rotate-x-51 rotate-z-43 transform-3d ...">
+              - generic [ref=f1e734]: <!-- ... -->
+              - generic [ref=f1e735]: </article>
+              - generic [ref=f1e736]: </div>
+          - paragraph [ref=f1e737]:
+            - text: Check out the updated
+            - link [ref=f1e738] [cursor=pointer]:
+              - /url: /docs/transform-style
+              - code [ref=f1e739]: "`transform-style`"
+            - text: ","
+            - link [ref=f1e740] [cursor=pointer]:
+              - /url: /docs/rotate
+              - code [ref=f1e741]: "`rotate`"
+            - text: ","
+            - link [ref=f1e742] [cursor=pointer]:
+              - /url: /docs/perspective
+              - code [ref=f1e743]: "`perspective`"
+            - text: ", and"
+            - link [ref=f1e744] [cursor=pointer]:
+              - /url: /docs/perspective-origin
+              - code [ref=f1e745]: "`perspective-origin`"
+            - text: documentation to get started.
+          - separator [ref=f1e746]
+          - heading [level=2] [ref=f1e747]:
+            - link "Expanded gradient APIs" [ref=f1e748] [cursor=pointer]:
+              - /url: "#expanded-gradient-apis"
+          - paragraph [ref=f1e749]: We've added a ton of new gradient features in v4.0, so you can pull off even fancier effects without having to write any custom CSS.
+          - heading [level=3] [ref=f1e750]:
+            - link "Linear gradient angles" [ref=f1e751] [cursor=pointer]:
+              - /url: "#linear-gradient-angles"
+          - paragraph [ref=f1e752]:
+            - text: Linear gradients now support angles as values, so you can use utilities like
+            - code [ref=f1e753]: "`bg-linear-45`"
+            - text: "to create a gradient on a 45 degree angle:"
+          - figure [ref=f1e756]:
+            - code [ref=f1e765]:
+              - generic [ref=f1e766]: <div class=" bg-linear-45 from-indigo-500 via-purple-500 to-pink-500"></div>
+          - paragraph [ref=f1e767]:
+            - text: You may notice we've renamed
+            - code [ref=f1e768]: "`bg-gradient-*`"
+            - text: to
+            - code [ref=f1e769]: "`bg-linear-*`"
+            - text: too — you'll see why shortly!
+          - heading [level=3] [ref=f1e770]:
+            - link "Gradient interpolation modifiers" [ref=f1e771] [cursor=pointer]:
+              - /url: "#gradient-interpolation-modifiers"
+          - paragraph [ref=f1e772]:
+            - text: We've added the ability to control the color interpolation mode for gradients using a modifier, so a class like
+            - code [ref=f1e773]: "`bg-linear-to-r/srgb`"
+            - text: interpolates using sRGB, and
+            - code [ref=f1e774]: "`bg-linear-to-r/oklch`"
+            - text: "interpolates using OKLCH:"
+          - figure [ref=f1e777]:
+            - code [ref=f1e787]:
+              - generic [ref=f1e788]: <div class=" bg-linear-to-r/srgb from-indigo-500 to-teal-400">...</div>
+              - generic [ref=f1e789]: <div class=" bg-linear-to-r/oklch from-indigo-500 to-teal-400">...</div>
+          - paragraph [ref=f1e790]:
+            - text: Using polar color spaces like OKLCH or HSL can lead to much more vivid gradients when the
+            - code [ref=f1e791]: "`from-*`"
+            - text: and
+            - code [ref=f1e792]: "`to-*`"
+            - text: colors are far apart on the color wheel. We're using OKLAB by default in v4.0 but you can always interpolate using a different color space by adding one of these modifiers.
+          - heading [level=3] [ref=f1e793]:
+            - link "Conic and radial gradients" [ref=f1e794] [cursor=pointer]:
+              - /url: "#conic-and-radial-gradients"
+          - paragraph [ref=f1e795]:
+            - text: We've added new
+            - code [ref=f1e796]: "`bg-conic-*`"
+            - text: and
+            - code [ref=f1e797]: "`bg-radial-*`"
+            - text: "utilities for creating conic and radial gradients:"
+          - figure [ref=f1e800]:
+            - code [ref=f1e810]:
+              - generic [ref=f1e811]: <div class="size-24 rounded-full bg-conic/[in_hsl_longer_hue] from-red-600 to-red-600"></div>
+              - generic [ref=f1e812]: <div class="size-24 rounded-full bg-radial-[at_25%_25%] from-white to-zinc-900 to-75%"></div>
+          - paragraph [ref=f1e813]:
+            - text: These new utilities work alongside the existing
+            - code [ref=f1e814]: "`from-*`"
+            - text: ","
+            - code [ref=f1e815]: "`via-*`"
+            - text: ", and"
+            - code [ref=f1e816]: "`to-*`"
+            - text: utilities to let you create conic and radial gradients the same way you create linear gradients, and include modifiers for setting the color interpolation method and arbitrary value support for controlling details like the gradient position.
+          - separator [ref=f1e817]
+          - heading [level=2] [ref=f1e818]:
+            - link "@starting-style support" [ref=f1e819] [cursor=pointer]:
+              - /url: "#starting-style-support"
+          - paragraph [ref=f1e820]:
+            - text: The new
+            - code [ref=f1e821]: "`starting`"
+            - text: variant adds support for the new CSS
+            - link [ref=f1e822] [cursor=pointer]:
+              - /url: https://developer.mozilla.org/en-US/docs/Web/CSS/@starting-style
+              - code [ref=f1e823]: "`@starting-style`"
+            - text: "feature, making it possible to transition element properties when an element is first displayed:"
+          - figure [ref=f1e826]:
+            - iframe [ref=f1e828]:
+              - button "Check for updates" [ref=f2e3]
+            - code [ref=f1e834]:
+              - generic [ref=f1e835]: <div>
+              - generic [ref=f1e836]: <button popovertarget="my-popover">Check for updates</button>
+              - generic [ref=f1e837]: <div popover id="my-popover" class=" transition-discrete starting:open:opacity-0 ...">
+              - generic [ref=f1e838]: <!-- ... -->
+              - generic [ref=f1e839]: </div>
+              - generic [ref=f1e840]: </div>
+          - paragraph [ref=f1e841]:
+            - text: With
+            - code [ref=f1e842]: "`@starting-style`"
+            - text: ", you can finally animate elements as they appear on the page without the need for any JavaScript at all."
+            - link "Browser support" [ref=f1e843] [cursor=pointer]:
+              - /url: https://caniuse.com/mdn-css_at-rules_starting-style
+            - text: probably isn't quite there yet for most teams, but we're getting close!
+          - separator [ref=f1e844]
+          - heading [level=2] [ref=f1e845]:
+            - link "not-* variant" [ref=f1e846] [cursor=pointer]:
+              - /url: "#not-variant"
+          - paragraph [ref=f1e847]:
+            - text: We've added a new
+            - code [ref=f1e848]: "`not-*`"
+            - text: variant which finally adds support for the CSS
+            - code [ref=f1e849]: "`:not()`"
+            - text: "pseudo-class:"
+          - generic [ref=f1e851]:
+            - generic [ref=f1e854]:
+              - generic [ref=f1e855]: HTML
+              - code [ref=f1e859]:
+                - generic [ref=f1e860]: <div class=" not-hover:opacity-75">
+                - generic [ref=f1e861]: <!-- ... -->
+                - generic [ref=f1e862]: </div>
+            - generic [ref=f1e865]:
+              - generic [ref=f1e866]: CSS
+              - code [ref=f1e870]:
+                - generic [ref=f1e871]: ".not-hover\\:opacity-75:not(*:hover) {"
+                - generic [ref=f1e872]: "opacity: 75%;"
+                - generic [ref=f1e873]: "}"
+                - generic [ref=f1e875]: "@media not (hover: hover) {"
+                - generic [ref=f1e876]: ".not-hover\\:opacity-75 {"
+                - generic [ref=f1e877]: "opacity: 75%;"
+                - generic [ref=f1e878]: "}"
+                - generic [ref=f1e879]: "}"
+          - paragraph [ref=f1e880]:
+            - text: It does double duty and also lets you negate media queries and
+            - code [ref=f1e881]: "`@supports`"
+            - text: "queries:"
+          - generic [ref=f1e883]:
+            - generic [ref=f1e886]:
+              - generic [ref=f1e887]: HTML
+              - code [ref=f1e891]:
+                - generic [ref=f1e892]: <div class=" not-supports-hanging-punctuation:px-4">
+                - generic [ref=f1e893]: <!-- ... -->
+                - generic [ref=f1e894]: </div>
+            - generic [ref=f1e897]:
+              - generic [ref=f1e898]: CSS
+              - code [ref=f1e902]:
+                - generic [ref=f1e903]: ".not-supports-hanging-punctuation\\:px-4 {"
+                - generic [ref=f1e904]: "@supports not (hanging-punctuation: var(--tw)) {"
+                - generic [ref=f1e905]: "padding-inline: calc(var(--spacing) * 4);"
+                - generic [ref=f1e906]: "}"
+                - generic [ref=f1e907]: "}"
+          - paragraph [ref=f1e908]:
+            - text: Check out the new
+            - link [ref=f1e909] [cursor=pointer]:
+              - /url: /docs/hover-focus-and-other-states#not
+              - code [ref=f1e910]: "`not-*`"
+              - text: documentation
+            - text: to learn more.
+          - separator [ref=f1e911]
+          - heading [level=2] [ref=f1e912]:
+            - link "Even more new utilities and variants" [ref=f1e913] [cursor=pointer]:
+              - /url: "#even-more-new-utilities-and-variants"
+          - paragraph [ref=f1e914]: "We've added a ton of other new utilities and variants to v4.0 too, including:"
+          - list [ref=f1e915]:
+            - listitem [ref=f1e916]:
+              - strong [ref=f1e917]:
+                - text: New
+                - link [ref=f1e918] [cursor=pointer]:
+                  - /url: /docs/box-shadow#adding-an-inset-shadow
+                  - code [ref=f1e919]: "`inset-shadow-*`"
+                - text: and
+                - link [ref=f1e920] [cursor=pointer]:
+                  - /url: /docs/box-shadow#adding-an-inset-ring
+                  - code [ref=f1e921]: "`inset-ring-*`"
+                - text: utilities
+              - text: — making it possible to stack up to four layers of box shadows on a single element.
+            - listitem [ref=f1e922]:
+              - strong [ref=f1e923]:
+                - text: New
+                - link [ref=f1e924] [cursor=pointer]:
+                  - /url: /docs/field-sizing
+                  - code [ref=f1e925]: "`field-sizing`"
+                - text: utilities
+              - text: — for auto-resizing textareas without writing a single line of JavaScript.
+            - listitem [ref=f1e926]:
+              - strong [ref=f1e927]:
+                - text: New
+                - link [ref=f1e928] [cursor=pointer]:
+                  - /url: /docs/color-scheme
+                  - code [ref=f1e929]: "`color-scheme`"
+                - text: utilities
+              - text: — so you can finally get rid of those ugly light scrollbars in dark mode.
+            - listitem [ref=f1e930]:
+              - strong [ref=f1e931]:
+                - text: New
+                - link [ref=f1e932] [cursor=pointer]:
+                  - /url: /docs/font-stretch
+                  - code [ref=f1e933]: "`font-stretch`"
+                - text: utilities
+              - text: — for carefully tweaking variable fonts that support different widths.
+            - listitem [ref=f1e934]:
+              - strong [ref=f1e935]:
+                - text: New
+                - link [ref=f1e936] [cursor=pointer]:
+                  - /url: /docs/hover-focus-and-other-states#styling-inert-elements
+                  - code [ref=f1e937]: "`inert`"
+                - text: variant
+              - text: — for styling non-interactive elements marked with the
+              - code [ref=f1e938]: "`inert`"
+              - text: attribute.
+            - listitem [ref=f1e939]:
+              - strong [ref=f1e940]:
+                - text: New
+                - link [ref=f1e941] [cursor=pointer]:
+                  - /url: /docs/hover-focus-and-other-states#first-last-odd-and-even
+                  - code [ref=f1e942]: "`nth-*`"
+                - text: variants
+              - text: — for doing really clever things you'll eventually regret.
+            - listitem [ref=f1e943]:
+              - strong [ref=f1e944]:
+                - text: New
+                - link [ref=f1e945] [cursor=pointer]:
+                  - /url: /docs/hover-focus-and-other-states#implicit-groups
+                  - code [ref=f1e946]: "`in-*`"
+                - text: variant
+              - text: — which is a lot like
+              - code [ref=f1e947]: "`group-*`"
+              - text: ", but without the need for the"
+              - code [ref=f1e948]: "`group`"
+              - text: class.
+            - listitem [ref=f1e949]:
+              - strong [ref=f1e950]:
+                - text: Support for
+                - link [ref=f1e951] [cursor=pointer]:
+                  - /url: /docs/hover-focus-and-other-states#openclosed-state
+                  - code [ref=f1e952]: "`:popover-open`"
+              - text: — using the existing
+              - code [ref=f1e953]: "`open`"
+              - text: variant to also target open popovers.
+            - listitem [ref=f1e954]:
+              - strong [ref=f1e955]:
+                - text: New
+                - link "descendant variant" [ref=f1e956] [cursor=pointer]:
+                  - /url: /docs/hover-focus-and-other-states#styling-all-descendants
+              - text: — for styling all descendant elements, for better or for worse.
+          - paragraph [ref=f1e957]: Check out the relevant documentation for all of these features to learn more.
+          - separator [ref=f1e958]
+          - paragraph [ref=f1e959]:
+            - strong [ref=f1e960]: And that's it — that's Tailwind CSS v4.0.
+            - text: It's been years of work to get to this point, but we're all extremely proud of this release and we can't wait to see what you build with it.
+          - paragraph [ref=f1e961]: Check it out, play with it, maybe even break it, and definitely let us know what you think.
+          - paragraph [ref=f1e962]: Just no bug reports until tomorrow please — let us at least enjoy one celebratory team dinner and maybe relax in the hot tub at this hotel for a bit believing that somehow we really did ship flawless software.
+        - generic [ref=f1e964]:
+          - heading "Get all of our updates directly to your inbox. Sign up for our newsletter." [level=2] [ref=f1e965]: Get all of our updates directly to your inbox.Sign up for our newsletter.
+          - generic [ref=f1e967]:
+            - textbox "Email address" [ref=f1e970]:
+              - /placeholder: Subscribe via email
+            - button "Subscribe" [ref=f1e972]
+        - contentinfo [ref=f1e974]:
+          - generic [ref=f1e975]:
+            - generic [ref=f1e976]:
+              - heading "Tailwind CSS" [level=3] [ref=f1e977]
+              - list [ref=f1e978]:
+                - listitem [ref=f1e979]:
+                  - link "Documentation" [ref=f1e980] [cursor=pointer]:
+                    - /url: /docs
+                - listitem [ref=f1e981]:
+                  - link "Playground" [ref=f1e982] [cursor=pointer]:
+                    - /url: https://play.tailwindcss.com/
+                - listitem [ref=f1e983]:
+                  - link "Blog" [ref=f1e984] [cursor=pointer]:
+                    - /url: /blog
+                - listitem [ref=f1e985]:
+                  - link "Showcase" [ref=f1e986] [cursor=pointer]:
+                    - /url: /showcase
+                - listitem [ref=f1e987]:
+                  - link "Sponsor" [ref=f1e988] [cursor=pointer]:
+                    - /url: /partners
+            - generic [ref=f1e989]:
+              - heading [level=3] [ref=f1e990]:
+                - link "Tailwind Plus" [ref=f1e991] [cursor=pointer]:
+                  - /url: /plus?ref=footer
+              - list [ref=f1e992]:
+                - listitem [ref=f1e993]:
+                  - link "UI Blocks" [ref=f1e994] [cursor=pointer]:
+                    - /url: /plus/ui-blocks?ref=footer
+                - listitem [ref=f1e995]:
+                  - link "Templates" [ref=f1e996] [cursor=pointer]:
+                    - /url: /plus/templates?ref=footer
+                - listitem [ref=f1e997]:
+                  - link "UI Kit" [ref=f1e998] [cursor=pointer]:
+                    - /url: /plus/ui-kit?ref=footer
+            - generic [ref=f1e999]:
+              - heading "Resources" [level=3] [ref=f1e1000]
+              - list [ref=f1e1001]:
+                - listitem [ref=f1e1002]:
+                  - link "Refactoring UI" [ref=f1e1003] [cursor=pointer]:
+                    - /url: https://www.refactoringui.com
+                - listitem [ref=f1e1004]:
+                  - link "Headless UI" [ref=f1e1005] [cursor=pointer]:
+                    - /url: https://headlessui.com
+                - listitem [ref=f1e1006]:
+                  - link "Heroicons" [ref=f1e1007] [cursor=pointer]:
+                    - /url: https://heroicons.com
+                - listitem [ref=f1e1008]:
+                  - link "Hero Patterns" [ref=f1e1009] [cursor=pointer]:
+                    - /url: https://heropatterns.com
+            - generic [ref=f1e1010]:
+              - heading "Community" [level=3] [ref=f1e1011]
+              - list [ref=f1e1012]:
+                - listitem [ref=f1e1013]:
+                  - link "GitHub" [ref=f1e1014] [cursor=pointer]:
+                    - /url: https://github.com/tailwindlabs/tailwindcss
+                - listitem [ref=f1e1015]:
+                  - link "Discord" [ref=f1e1016] [cursor=pointer]:
+                    - /url: /partners#insiders
+                - listitem [ref=f1e1017]:
+                  - link "X" [ref=f1e1018] [cursor=pointer]:
+                    - /url: https://x.com/tailwindcss
+        - generic [ref=f1e1020]:
+          - radiogroup [ref=f1e1021]:
+            - radio "System theme" [checked] [ref=f1e1022]
+            - radio "Light theme" [ref=f1e1027]
+            - radio "Dark theme" [ref=f1e1034]
+          - generic [ref=f1e1039]:
+            - generic [ref=f1e1040]: Copyright © 2026 Tailwind Labs Inc.
+            - generic [ref=f1e1041]: ·
+            - link "Trademark Policy" [ref=f1e1042] [cursor=pointer]:
+              - /url: /brand
+  - alert [ref=f1e1044]
