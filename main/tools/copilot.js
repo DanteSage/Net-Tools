@@ -10,14 +10,70 @@ const { app, ipcMain, safeStorage } = require('electron');
 let contextGlobal = null;
 const pendingApprovals = new Map();
 const disabledPagingConnections = new Set();
-let activeHttpRequest = null;
-let isAborted = false;
+const activeCopilotSessions = new Map();
 
 const READ_ONLY_COMMAND_PREFIXES = new Set(['show', 'display', 'ping', 'traceroute']);
 const UNSAFE_COMMAND_SYNTAX = /[^\S ]|[\u0000-\u001f\u007f;&|><`$\\]/;
 
 // 提示符匹配正则 (支持 Cisco/Ruijie 的 > 或 #，Huawei/H3C 的 ] 或 >，支持接口名中的 / 和 :)
 const PROMPT_REGEX = /(?:[A-Za-z0-9_./:\-]+\s*(\([A-Za-z0-9_./:\-]+\))?\s*[#>]|\[[A-Za-z0-9_./:\-]+\])$/;
+
+function isCopilotSessionAborted(session) {
+    return Boolean(session && session.signal && session.signal.aborted);
+}
+
+function getCopilotSenderKey(sender) {
+    return sender?.id !== undefined ? sender.id : sender;
+}
+
+function sendCopilotEvent(event, session, channel, payload) {
+    if (isCopilotSessionAborted(session)) return false;
+    const sender = session?.sender || event?.sender;
+    if (!sender || (typeof sender.isDestroyed === 'function' && sender.isDestroyed())) return false;
+    try {
+        sender.send(channel, payload);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function settlePendingApproval(requestId, approved) {
+    const pending = pendingApprovals.get(requestId);
+    if (!pending) return false;
+
+    pendingApprovals.delete(requestId);
+    pending.session?.approvalIds.delete(requestId);
+    try {
+        pending.resolve(isApprovalGranted(approved));
+    } catch (_) {}
+    return true;
+}
+
+function createCopilotSession(sender) {
+    const controller = new AbortController();
+    const session = {
+        sender,
+        controller,
+        signal: controller.signal,
+        activeHttpRequest: null,
+        approvalIds: new Set(),
+        abort() {
+            if (!controller.signal.aborted) controller.abort();
+
+            const request = session.activeHttpRequest;
+            session.activeHttpRequest = null;
+            if (request && typeof request.destroy === 'function') {
+                try { request.destroy(); } catch (_) {}
+            }
+
+            for (const requestId of [...session.approvalIds]) {
+                settlePendingApproval(requestId, false);
+            }
+        }
+    };
+    return session;
+}
 
 // 定义 OpenAI 工具 Schema
 const tools = [
@@ -251,22 +307,37 @@ async function executeCommandOnActiveConnection(context, connectionId, command, 
 /**
  * 向渲染进程发送审核指令请求，阻塞并等待用户决策
  */
-function requestUserApproval(context, connectionId, command) {
+function requestUserApproval(context, connectionId, command, session = null) {
     return new Promise((resolve) => {
-        const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        pendingApprovals.set(requestId, { resolve });
-
-        const mainWindow = context.getMainWindow();
-        if (!mainWindow || mainWindow.isDestroyed()) {
+        if (isCopilotSessionAborted(session)) {
             resolve(false);
             return;
         }
 
-        mainWindow.webContents.send('copilot:approveRequest', {
-            requestId,
-            connectionId,
-            command
-        });
+        const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        let sender = session?.sender || null;
+        if (!sender) {
+            const mainWindow = context.getMainWindow();
+            sender = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null;
+        }
+
+        if (!sender || (typeof sender.isDestroyed === 'function' && sender.isDestroyed())) {
+            resolve(false);
+            return;
+        }
+
+        pendingApprovals.set(requestId, { resolve, session, sender });
+        session?.approvalIds.add(requestId);
+
+        try {
+            sender.send('copilot:approveRequest', {
+                requestId,
+                connectionId,
+                command
+            });
+        } catch (_) {
+            settlePendingApproval(requestId, false);
+        }
     });
 }
 
@@ -276,8 +347,33 @@ function requestUserApproval(context, connectionId, command) {
 /**
  * 实际调用大模型接口，支持工具注册与流式流解析 (异步 Promise 版本)
  */
-function callLLM(event, messages, systemPrompt, config) {
+function callLLM(event, messages, systemPrompt, config, session = null, dependencies = {}) {
     return new Promise((resolve) => {
+        let req = null;
+        let settled = false;
+
+        const finish = (result) => {
+            if (settled) return false;
+            settled = true;
+            if (session?.activeHttpRequest === req) session.activeHttpRequest = null;
+            if (session?.signal) session.signal.removeEventListener('abort', handleAbort);
+            resolve(result);
+            return true;
+        };
+        const handleAbort = () => {
+            const activeRequest = req;
+            finish({ error: 'Aborted', aborted: true });
+            if (activeRequest && typeof activeRequest.destroy === 'function') {
+                try { activeRequest.destroy(); } catch (_) {}
+            }
+        };
+
+        if (isCopilotSessionAborted(session)) {
+            finish({ error: 'Aborted', aborted: true });
+            return;
+        }
+        session?.signal?.addEventListener('abort', handleAbort, { once: true });
+
         let endpointUrl = (config.apiUrl || 'https://api.openai.com/v1/chat/completions').trim();
         try {
             const _u = new URL(endpointUrl);
@@ -289,8 +385,9 @@ function callLLM(event, messages, systemPrompt, config) {
                 }
             }
         } catch (e) {
-            event.sender.send('copilot:error', `无效的 API 地址: ${endpointUrl}`);
-            resolve({ error: 'Invalid API URL' });
+            if (finish({ error: 'Invalid API URL' })) {
+                sendCopilotEvent(event, session, 'copilot:error', `无效的 API 地址: ${endpointUrl}`);
+            }
             return;
         }
 
@@ -317,8 +414,9 @@ function callLLM(event, messages, systemPrompt, config) {
         try {
             parsedUrl = new URL(endpointUrl);
         } catch {
-            event.sender.send('copilot:error', `解析 API 地址失败: ${endpointUrl}`);
-            resolve({ error: 'URL Parse Failed' });
+            if (finish({ error: 'URL Parse Failed' })) {
+                sendCopilotEvent(event, session, 'copilot:error', `解析 API 地址失败: ${endpointUrl}`);
+            }
             return;
         }
 
@@ -333,11 +431,13 @@ function callLLM(event, messages, systemPrompt, config) {
                 'Content-Length': Buffer.byteLength(body)
             },
             timeout: 60000,
-            rejectUnauthorized: true
+            rejectUnauthorized: true,
+            ...(session?.signal ? { signal: session.signal } : {})
         };
 
-        const transport = parsedUrl.protocol === 'https:' ? https : http;
-        let req;
+        const transport = parsedUrl.protocol === 'https:'
+            ? (dependencies.https || https)
+            : (dependencies.http || http);
         try {
             req = transport.request(options, (res) => {
                 if (res.statusCode && res.statusCode >= 400) {
@@ -349,8 +449,11 @@ function callLLM(event, messages, systemPrompt, config) {
                             const ej = JSON.parse(errData);
                             errMsg = ej.error?.message || errMsg;
                         } catch (_) {}
-                        event.sender.send('copilot:error', errMsg);
-                        resolve({ error: errMsg });
+                        if (isCopilotSessionAborted(session)) {
+                            finish({ error: 'Aborted', aborted: true });
+                        } else if (finish({ error: errMsg })) {
+                            sendCopilotEvent(event, session, 'copilot:error', errMsg);
+                        }
                     });
                     return;
                 }
@@ -360,6 +463,7 @@ function callLLM(event, messages, systemPrompt, config) {
                 const accumulatedToolCalls = [];
 
                 res.on('data', (chunk) => {
+                    if (settled || isCopilotSessionAborted(session)) return;
                     buffer += chunk.toString();
                     const lines = buffer.split('\n');
                     buffer = lines.pop(); // 保留不完整行
@@ -378,7 +482,7 @@ function callLLM(event, messages, systemPrompt, config) {
                                 const text = choice.delta?.content;
                                 if (text) {
                                     accumulatedContent += text;
-                                    event.sender.send('copilot:chunk', text);
+                                    sendCopilotEvent(event, session, 'copilot:chunk', text);
                                 }
 
                                 const toolCalls = choice.delta?.tool_calls;
@@ -407,6 +511,11 @@ function callLLM(event, messages, systemPrompt, config) {
                 });
 
                 res.on('end', () => {
+                    if (settled) return;
+                    if (isCopilotSessionAborted(session)) {
+                        finish({ error: 'Aborted', aborted: true });
+                        return;
+                    }
                     if (buffer.trim()) {
                         const trimmed = buffer.trim();
                         if (trimmed.startsWith('data:')) {
@@ -419,7 +528,7 @@ function callLLM(event, messages, systemPrompt, config) {
                                         const text = choice.delta?.content;
                                         if (text) {
                                             accumulatedContent += text;
-                                            event.sender.send('copilot:chunk', text);
+                                            sendCopilotEvent(event, session, 'copilot:chunk', text);
                                         }
                                     }
                                 } catch (_) {}
@@ -428,31 +537,41 @@ function callLLM(event, messages, systemPrompt, config) {
                     }
 
                     const finalToolCalls = accumulatedToolCalls.filter(x => x);
-                    if (activeHttpRequest === req) activeHttpRequest = null;
-                    resolve({ content: accumulatedContent, toolCalls: finalToolCalls });
+                    finish({ content: accumulatedContent, toolCalls: finalToolCalls });
                 });
             });
 
             req.on('error', (err) => {
-                if (activeHttpRequest === req) activeHttpRequest = null;
-                event.sender.send('copilot:error', `网络请求失败: ${err.message}`);
-                resolve({ error: err.message });
+                if (settled) return;
+                if (isCopilotSessionAborted(session) || err?.name === 'AbortError') {
+                    finish({ error: 'Aborted', aborted: true });
+                } else if (finish({ error: err.message })) {
+                    sendCopilotEvent(event, session, 'copilot:error', `网络请求失败: ${err.message}`);
+                }
             });
 
             req.on('timeout', () => {
-                req.destroy();
-                if (activeHttpRequest === req) activeHttpRequest = null;
-                event.sender.send('copilot:error', '请求超时，请检查网络或 API Key 状态');
-                resolve({ error: 'Request Timeout' });
+                if (settled) return;
+                if (isCopilotSessionAborted(session)) {
+                    handleAbort();
+                    return;
+                }
+                if (finish({ error: 'Request Timeout' })) {
+                    sendCopilotEvent(event, session, 'copilot:error', '请求超时，请检查网络或 API Key 状态');
+                }
+                try { req.destroy(); } catch (_) {}
             });
 
-            activeHttpRequest = req;
+            if (session) session.activeHttpRequest = req;
             req.write(body);
             req.end();
 
         } catch (error) {
-            event.sender.send('copilot:error', `启动请求发生异常: ${error.message}`);
-            resolve({ error: error.message });
+            if (isCopilotSessionAborted(session) || error?.name === 'AbortError') {
+                finish({ error: 'Aborted', aborted: true });
+            } else if (finish({ error: error.message })) {
+                sendCopilotEvent(event, session, 'copilot:error', `启动请求发生异常: ${error.message}`);
+            }
         }
     });
 }
@@ -464,9 +583,10 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
     const approvalRequester = dependencies.requestUserApproval || requestUserApproval;
     const commandExecutor = dependencies.executeCommandOnActiveConnection || executeCommandOnActiveConnection;
     const executionContext = dependencies.context || contextGlobal;
+    const session = dependencies.session || null;
     const toolMessages = [];
     for (const toolCall of toolCalls) {
-        if (isAborted) break;
+        if (isCopilotSessionAborted(session)) break;
         if (toolCall.function.name === 'execute_command') {
             let args;
             try {
@@ -483,7 +603,7 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
             const isWrite = isCommandPotentiallyWrite(command, args.is_write_command);
 
             // 1. 发送正在执行状态通知前端
-            event.sender.send('copilot:agentStep', {
+            sendCopilotEvent(event, session, 'copilot:agentStep', {
                 status: 'executing',
                 id: toolCall.id,
                 command: command,
@@ -506,12 +626,14 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
             } else {
                 // 所有 AI 设备命令都必须由用户逐条批准，风险标签不参与授权。
                 const approved = isApprovalGranted(
-                    await approvalRequester(executionContext, connectionId, command)
+                    await approvalRequester(executionContext, connectionId, command, session)
                 );
 
+                if (isCopilotSessionAborted(session)) break;
                 if (approved) {
                     // 执行设备命令
                     const runRes = await commandExecutor(executionContext, connectionId, command, deviceType);
+                    if (isCopilotSessionAborted(session)) break;
                     if (runRes.success) {
                         executeResult = runRes.output;
                     } else {
@@ -527,7 +649,7 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
             }
 
             // 2. 发送执行完毕状态通知前端
-            event.sender.send('copilot:agentStep', {
+            sendCopilotEvent(event, session, 'copilot:agentStep', {
                 status: 'completed',
                 id: toolCall.id,
                 command: command,
@@ -553,11 +675,12 @@ async function executeToolCalls(event, toolCalls, connectionId, deviceType, depe
  * 模拟 LangGraph 的节点跳转与状态流转
  */
 class NetworkDiagnoseGraph {
-    constructor(event, messages, systemPrompt, config, connectionId, deviceType) {
+    constructor(event, messages, systemPrompt, config, connectionId, deviceType, session = null) {
         this.event = event;
         this.config = config;
         this.connectionId = connectionId;
         this.deviceType = deviceType;
+        this.session = session;
         this.messages = [...messages]; // 复制历史记录
         this.baseSystemPrompt = systemPrompt || '你是一个资深网络专家，专注于为用户提供网络配置脚本的编写与排错建议。';
 
@@ -572,7 +695,7 @@ class NetworkDiagnoseGraph {
 
     async run() {
         while (!this.state.isCompleted && this.state.stepsCount < this.state.maxSteps) {
-            if (isAborted) break;
+            if (isCopilotSessionAborted(this.session)) break;
 
             console.log(`[DiagnoseGraph] Running Node: ${this.state.currentNode}, Step: ${this.state.stepsCount}`);
 
@@ -591,8 +714,8 @@ class NetworkDiagnoseGraph {
             this.state.stepsCount++;
         }
 
-        if (!isAborted) {
-            this.event.sender.send('copilot:end', this.messages);
+        if (!isCopilotSessionAborted(this.session)) {
+            sendCopilotEvent(this.event, this.session, 'copilot:end', this.messages);
         }
     }
 
@@ -618,14 +741,22 @@ class NetworkDiagnoseGraph {
         // 拼接智能提示词
         const systemPrompt = `${this.baseSystemPrompt}\n\n【诊断流程 - 阶段 1：初始化与信息收集】\n你正在协助用户排查一个网络故障。\n${protocolInfo}\n1. 请决定你需要执行的第一条网络设备调试/查询指令，以了解当前设备的基础运行状态。\n2. 你必须且只能通过调用 \`execute_command\` 工具执行此命令。绝对禁止在没有工具调用的情况下口头宣称你执行了命令。\n3. 请只使用只读性质的查询指令（如 show, display, ping, traceroute），严禁修改配置！`;
 
-        const res = await callLLM(this.event, this.messages, systemPrompt, this.config);
+        const res = await callLLM(this.event, this.messages, systemPrompt, this.config, this.session);
+        if (isCopilotSessionAborted(this.session)) return;
         if (res.error) {
             this.state.isCompleted = true;
             return;
         }
 
         if (res.toolCalls && res.toolCalls.length > 0) {
-            const toolMessages = await executeToolCalls(this.event, res.toolCalls, this.connectionId, this.deviceType);
+            const toolMessages = await executeToolCalls(
+                this.event,
+                res.toolCalls,
+                this.connectionId,
+                this.deviceType,
+                { session: this.session }
+            );
+            if (isCopilotSessionAborted(this.session)) return;
 
             this.messages.push({
                 role: 'assistant',
@@ -671,14 +802,22 @@ ${Object.keys(this.state.diagnosticData).map(cmd => `- 命令: \`${cmd}\` (回�
 1. 若**需要**，请**继续且仅调用一次** \`execute_command\` 工具。
 2. 若**不需要**（已有足够证据诊断根本原因），请**不要生成工具调用**，直接回复你的简短分析思路。状态机将自动跳转至分析诊断节点。`;
 
-        const res = await callLLM(this.event, this.messages, systemPrompt, this.config);
+        const res = await callLLM(this.event, this.messages, systemPrompt, this.config, this.session);
+        if (isCopilotSessionAborted(this.session)) return;
         if (res.error) {
             this.state.isCompleted = true;
             return;
         }
 
         if (res.toolCalls && res.toolCalls.length > 0) {
-            const toolMessages = await executeToolCalls(this.event, res.toolCalls, this.connectionId, this.deviceType);
+            const toolMessages = await executeToolCalls(
+                this.event,
+                res.toolCalls,
+                this.connectionId,
+                this.deviceType,
+                { session: this.session }
+            );
+            if (isCopilotSessionAborted(this.session)) return;
 
             this.messages.push({
                 role: 'assistant',
@@ -727,14 +866,22 @@ ${Object.entries(this.state.diagnosticData).map(([cmd, out]) => `\n====== 命令
 3. 如果需要最后一两个特殊只读命令来最终证实你的结论，你依然可以调用工具执行命令。
 4. 如果诊断已经基本明晰，请**停止调用工具**，直接输出诊断思路。系统将自动引导进入生成最终报告阶段。`;
 
-        const res = await callLLM(this.event, this.messages, systemPrompt, this.config);
+        const res = await callLLM(this.event, this.messages, systemPrompt, this.config, this.session);
+        if (isCopilotSessionAborted(this.session)) return;
         if (res.error) {
             this.state.isCompleted = true;
             return;
         }
 
         if (res.toolCalls && res.toolCalls.length > 0) {
-            const toolMessages = await executeToolCalls(this.event, res.toolCalls, this.connectionId, this.deviceType);
+            const toolMessages = await executeToolCalls(
+                this.event,
+                res.toolCalls,
+                this.connectionId,
+                this.deviceType,
+                { session: this.session }
+            );
+            if (isCopilotSessionAborted(this.session)) return;
             this.messages.push({
                 role: 'assistant',
                 content: res.content || null,
@@ -765,9 +912,7 @@ ${Object.entries(this.state.diagnosticData).map(([cmd, out]) => `\n====== 命令
      */
     async summarizeNode() {
         console.log('[DiagnoseGraph] Summarize Node');
-        try {
-            this.event.sender.send('copilot:generatingReport');
-        } catch (_) {}
+        sendCopilotEvent(this.event, this.session, 'copilot:generatingReport');
 
         const systemPrompt = `${this.baseSystemPrompt}
 
@@ -779,7 +924,8 @@ ${Object.entries(this.state.diagnosticData).map(([cmd, out]) => `\n====== 命令
 3. **修复建议方案**：提供精确的、开箱即用的配置下发指令建议（区分好模式，如系统视图/全局配置模式），供用户复制执行。
 4. **验证建议**：配置修改后应该如何验证是否恢复（例如使用 ping/show 等指令）。`;
 
-        const res = await callLLM(this.event, this.messages, systemPrompt, this.config);
+        const res = await callLLM(this.event, this.messages, systemPrompt, this.config, this.session);
+        if (isCopilotSessionAborted(this.session)) return;
         if (res.content) {
             this.messages.push({ role: 'assistant', content: res.content });
         }
@@ -897,12 +1043,17 @@ async function getCurrentPrompt(context, connectionId) {
 /**
  * 注册 AI 网络助手相关 IPC 处理程序
  */
-function registerCopilotHandlers(context) {
+function registerCopilotHandlers(context, dependencies = {}) {
     contextGlobal = context;
+    const ipc = dependencies.ipcMain || ipcMain;
+    const loadConfig = dependencies.loadAiConfig || loadAiConfig;
+    const saveConfig = dependencies.saveAiConfig || saveAiConfig;
+    const readCurrentPrompt = dependencies.getCurrentPrompt || getCurrentPrompt;
+    const createGraph = dependencies.createGraph || ((...args) => new NetworkDiagnoseGraph(...args));
 
     // 获取配置状态
-    ipcMain.handle('copilot:getConfigStatus', async () => {
-        const config = loadAiConfig();
+    ipc.handle('copilot:getConfigStatus', async () => {
+        const config = loadConfig();
         return {
             configured: !!config.apiKey,
             model: config.model || 'gpt-3.5-turbo',
@@ -911,13 +1062,13 @@ function registerCopilotHandlers(context) {
     });
 
     // 获取完整配置数据
-    ipcMain.handle('copilot:getConfig', async () => {
-        return loadAiConfig();
+    ipc.handle('copilot:getConfig', async () => {
+        return loadConfig();
     });
 
     // 保存完整配置数据
-    ipcMain.handle('copilot:saveConfig', async (event, config) => {
-        const success = saveAiConfig(config);
+    ipc.handle('copilot:saveConfig', async (event, config) => {
+        const success = saveConfig(config);
         const { BrowserWindow } = require('electron');
         BrowserWindow.getAllWindows().forEach(win => {
             try {
@@ -930,29 +1081,53 @@ function registerCopilotHandlers(context) {
     });
 
     // 审批反馈处理器
-    ipcMain.handle('copilot:approveResponse', async (event, { requestId, approved }) => {
-        if (pendingApprovals.has(requestId)) {
-            const { resolve } = pendingApprovals.get(requestId);
-            pendingApprovals.delete(requestId);
-            resolve(isApprovalGranted(approved));
+    ipc.handle('copilot:approveResponse', async (event, { requestId, approved }) => {
+        const pending = pendingApprovals.get(requestId);
+        if (pending) {
+            const sameSender = pending.sender === event.sender
+                || (pending.sender?.id !== undefined && pending.sender.id === event.sender?.id);
+            if (!sameSender) {
+                return { success: false, error: '审批请求不属于当前窗口' };
+            }
+            settlePendingApproval(requestId, approved);
             return { success: true };
         }
         return { success: false, error: '审批请求已失效或不存在' };
     });
 
     // 监听 AI 流式聊天请求 (Agent 版)
-    ipcMain.on('copilot:chat', async (event, { messages, systemPrompt, connectionId, deviceType }) => {
-        isAborted = false;
-        if (activeHttpRequest) {
-            try {
-                activeHttpRequest.destroy();
-            } catch (e) {}
-            activeHttpRequest = null;
-        }
+    ipc.on('copilot:chat', async (event, payload = {}) => {
+        const { messages = [], systemPrompt, connectionId, deviceType } = payload;
+        const sender = event.sender;
+        const senderKey = getCopilotSenderKey(sender);
+        const previousSession = activeCopilotSessions.get(senderKey);
+        if (previousSession) previousSession.abort();
 
-        const config = loadAiConfig();
+        const session = createCopilotSession(sender);
+        activeCopilotSessions.set(senderKey, session);
+        const handleSenderDestroyed = () => {
+            session.abort();
+            if (activeCopilotSessions.get(senderKey) === session) {
+                activeCopilotSessions.delete(senderKey);
+            }
+        };
+        if (sender && typeof sender.once === 'function') {
+            sender.once('destroyed', handleSenderDestroyed);
+        }
+        const cleanupSession = () => {
+            if (activeCopilotSessions.get(senderKey) === session) {
+                activeCopilotSessions.delete(senderKey);
+            }
+            if (sender && typeof sender.removeListener === 'function') {
+                sender.removeListener('destroyed', handleSenderDestroyed);
+            }
+            session.abort();
+        };
+
+        const config = loadConfig();
         if (!config.apiKey) {
-            event.sender.send('copilot:error', '未检测到 API Key，请先在高级工具->TsharkAnalyzer 设置中配置 AI Key');
+            sendCopilotEvent(event, session, 'copilot:error', '未检测到 API Key，请先在高级工具->TsharkAnalyzer 设置中配置 AI Key');
+            cleanupSession();
             return;
         }
 
@@ -961,7 +1136,7 @@ function registerCopilotHandlers(context) {
         // 针对特定终端状态加入提示信息
         if (connectionId) {
             try {
-                const currentPrompt = await getCurrentPrompt(contextGlobal, connectionId);
+                const currentPrompt = await readCurrentPrompt(contextGlobal, connectionId);
                 if (currentPrompt) {
                     const promptExplanation = parsePromptMode(currentPrompt, deviceType);
                     updatedSystemPrompt += `\n\n【重要上下文】当前设备终端所处的${promptExplanation}`;
@@ -971,38 +1146,53 @@ function registerCopilotHandlers(context) {
             }
         }
 
-        if (isAborted) return;
+        if (isCopilotSessionAborted(session)) {
+            cleanupSession();
+            return;
+        }
 
         // 实例化诊断状态机并运行
-        const graph = new NetworkDiagnoseGraph(event, messages, updatedSystemPrompt, config, connectionId, deviceType);
-        graph.run().catch(err => {
-            console.error('诊断状态机执行异常:', err);
-            event.sender.send('copilot:error', `诊断执行失败: ${err.message}`);
-        });
+        let graph;
+        try {
+            graph = createGraph(event, messages, updatedSystemPrompt, config, connectionId, deviceType, session);
+        } catch (error) {
+            console.error('诊断状态机创建异常:', error);
+            if (!isCopilotSessionAborted(session)) {
+                sendCopilotEvent(event, session, 'copilot:error', `诊断执行失败: ${error.message}`);
+            }
+            cleanupSession();
+            return;
+        }
+
+        Promise.resolve()
+            .then(() => graph.run())
+            .catch((error) => {
+                console.error('诊断状态机执行异常:', error);
+                if (!isCopilotSessionAborted(session)) {
+                    sendCopilotEvent(event, session, 'copilot:error', `诊断执行失败: ${error.message}`);
+                }
+            })
+            .finally(cleanupSession);
     });
 
     // 监听中止请求
-    ipcMain.on('copilot:abort', (event) => {
-        isAborted = true;
-        if (activeHttpRequest) {
-            try {
-                activeHttpRequest.destroy();
-            } catch (e) {}
-            activeHttpRequest = null;
+    ipc.on('copilot:abort', (event) => {
+        const senderKey = getCopilotSenderKey(event.sender);
+        const session = activeCopilotSessions.get(senderKey);
+        if (!session) return;
+
+        session.abort();
+        if (activeCopilotSessions.get(senderKey) === session) {
+            activeCopilotSessions.delete(senderKey);
         }
-        // 清理所有挂起的人工审批，向对应的 Promise 返回 false 阻断命令执行
-        pendingApprovals.forEach((item) => {
-            try {
-                item.resolve(false);
-            } catch (e) {}
-        });
-        pendingApprovals.clear();
         console.log('[Copilot] AI execution aborted by user.');
     });
 }
 
 module.exports = {
     registerCopilotHandlers,
+    createCopilotSession,
+    callLLM,
     isCommandPotentiallyWrite,
     isApprovalGranted,
     executeToolCalls
