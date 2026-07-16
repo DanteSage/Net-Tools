@@ -25,6 +25,71 @@ try {
 function registerSSHHandlers(context, dependencies = {}) {
     const { activeConnections, getMainWindow, isQuitting } = context;
     const ipc = dependencies.ipcMain || ipcMain;
+    const sshModule = dependencies.ssh2 || ssh2;
+    const connectionLifecycles = new WeakMap();
+
+    function getConnectionLifecycle(conn) {
+        let lifecycle = connectionLifecycles.get(conn);
+        if (!lifecycle) {
+            lifecycle = {
+                closeHandled: false,
+                shellCleanup: null
+            };
+            connectionLifecycles.set(conn, lifecycle);
+        }
+        return lifecycle;
+    }
+
+    function notifySSHClose(connectionId, lifecycle, details = {}) {
+        if (lifecycle.closeHandled) return;
+        lifecycle.closeHandled = true;
+        if (isQuitting()) return;
+
+        const mainWindow = getMainWindow();
+        if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+        try {
+            mainWindow.webContents.send('ssh:close', {
+                connectionId,
+                ...details
+            });
+        } catch (e) {}
+    }
+
+    function cleanupSSHConnection(connectionId, conn, options = {}) {
+        if (activeConnections.get(connectionId) !== conn) return false;
+
+        const {
+            error = null,
+            notify = true,
+            closeClient = false,
+            closeDetails = {}
+        } = options;
+        const lifecycle = getConnectionLifecycle(conn);
+
+        // Remove the owner first so synchronous end/close events cannot re-enter cleanup.
+        activeConnections.delete(connectionId);
+        if (!notify) lifecycle.closeHandled = true;
+
+        if (typeof lifecycle.shellCleanup === 'function') {
+            lifecycle.shellCleanup(error, { notify: false, closeConnection: false });
+        } else {
+            activeConnections.delete(`${connectionId}_shell`);
+        }
+        activeConnections.delete(`${connectionId}_sftp`);
+        removeConnectionEncoding(connectionId);
+
+        if (notify) {
+            notifySSHClose(connectionId, lifecycle, {
+                ...closeDetails,
+                ...(error ? { error: error.message } : {})
+            });
+        }
+
+        if (closeClient && typeof conn.end === 'function') {
+            try { conn.end(); } catch (e) {}
+        }
+        return true;
+    }
 
     async function writeToShell(connectionId, data) {
         const stream = activeConnections.get(`${connectionId}_shell`);
@@ -57,12 +122,12 @@ function registerSSHHandlers(context, dependencies = {}) {
 
     // SSH连接测试
     ipc.handle('ssh:test', async (event, config) => {
-        if (!ssh2) {
+        if (!sshModule) {
             return { success: false, error: 'SSH2 模块未安装' };
         }
 
         return new Promise((resolve) => {
-            const conn = new ssh2.Client();
+            const conn = new sshModule.Client();
             const timeout = setTimeout(() => {
                 conn.end();
                 resolve({ success: false, error: '连接超时' });
@@ -86,22 +151,68 @@ function registerSSHHandlers(context, dependencies = {}) {
 
     // SSH连接
     ipc.handle('ssh:connect', async (event, config) => {
-        if (!ssh2) {
+        if (!sshModule) {
             return { success: false, error: 'SSH2 模块未安装，请运行 npm install' };
         }
 
         return new Promise((resolve) => {
-            const conn = new ssh2.Client();
+            const conn = new sshModule.Client();
             const connectionId = `${config.host}_${Date.now()}`;
+            let ready = false;
+            let settled = false;
+            let lastError = null;
 
-            conn.on('ready', () => {
+            const settle = (result) => {
+                if (settled) return false;
+                settled = true;
+                resolve(result);
+                return true;
+            };
+
+            conn.once('ready', () => {
+                if (settled) {
+                    try { conn.end(); } catch (e) {}
+                    return;
+                }
+                ready = true;
                 conn.setNoDelay(true);
+                getConnectionLifecycle(conn);
                 activeConnections.set(connectionId, conn);
-                resolve({ success: true, connectionId });
+                settle({ success: true, connectionId });
             });
 
             conn.on('error', (err) => {
-                resolve({ success: false, error: err.message });
+                lastError = err;
+                if (!ready) {
+                    settle({ success: false, error: err.message });
+                    return;
+                }
+                cleanupSSHConnection(connectionId, conn, {
+                    error: err,
+                    closeClient: true
+                });
+            });
+
+            conn.once('end', () => {
+                if (!ready) {
+                    settle({
+                        success: false,
+                        error: lastError ? lastError.message : '连接在建立完成前已关闭'
+                    });
+                    return;
+                }
+                cleanupSSHConnection(connectionId, conn, { error: lastError });
+            });
+
+            conn.once('close', () => {
+                if (!ready) {
+                    settle({
+                        success: false,
+                        error: lastError ? lastError.message : '连接在建立完成前已关闭'
+                    });
+                    return;
+                }
+                cleanupSSHConnection(connectionId, conn, { error: lastError });
             });
 
             const connectConfig = createSSHConfig(config);
@@ -187,6 +298,15 @@ function registerSSHHandlers(context, dependencies = {}) {
                     resolve({ success: false, error: err.message });
                     return;
                 }
+                if (activeConnections.get(connectionId) !== conn) {
+                    if (stream && typeof stream.destroy === 'function') {
+                        try { stream.destroy(); } catch (e) {}
+                    } else if (stream && typeof stream.end === 'function') {
+                        try { stream.end(); } catch (e) {}
+                    }
+                    resolve({ success: false, error: '连接不存在或已断开' });
+                    return;
+                }
 
                 const shellId = `shell_${Date.now()}`;
                 const outputBuffer = createTerminalDataBuffer((data) => {
@@ -201,24 +321,38 @@ function registerSSHHandlers(context, dependencies = {}) {
                 });
 
                 let cleanedUp = false;
-                const cleanupShell = (error = null) => {
+                const lifecycle = getConnectionLifecycle(conn);
+                const cleanupShell = (error = null, cleanupOptions = {}) => {
                     if (cleanedUp) return;
                     cleanedUp = true;
+                    const {
+                        notify = true,
+                        closeConnection = true
+                    } = cleanupOptions;
                     if (error && !stream.destroyed && typeof stream.destroy === 'function') {
                         try { stream.destroy(); } catch (_) {}
                     }
                     outputBuffer.dispose(true);
-                    activeConnections.delete(`${connectionId}_shell`);
-                    if (isQuitting()) return;
-                    const mainWindow = getMainWindow();
-                    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
-                    try {
-                        mainWindow.webContents.send('ssh:close', {
-                            connectionId,
+                    if (activeConnections.get(`${connectionId}_shell`) === stream) {
+                        activeConnections.delete(`${connectionId}_shell`);
+                    }
+                    if (lifecycle.shellCleanup === cleanupShell) {
+                        lifecycle.shellCleanup = null;
+                    }
+
+                    if (closeConnection) {
+                        cleanupSSHConnection(connectionId, conn, {
+                            error,
+                            notify,
+                            closeClient: true,
+                            closeDetails: { shellId }
+                        });
+                    } else if (notify) {
+                        notifySSHClose(connectionId, lifecycle, {
                             shellId,
                             ...(error ? { error: error.message } : {})
                         });
-                    } catch (e) { }
+                    }
                 };
 
                 stream.on('data', (chunk) => {
@@ -233,6 +367,7 @@ function registerSSHHandlers(context, dependencies = {}) {
                 stream.once('error', (error) => cleanupShell(error));
                 stream.on('close', () => cleanupShell());
 
+                lifecycle.shellCleanup = cleanupShell;
                 activeConnections.set(`${connectionId}_shell`, stream);
                 resolve({ success: true, shellId });
             });
@@ -257,11 +392,10 @@ function registerSSHHandlers(context, dependencies = {}) {
     ipc.handle('ssh:disconnect', async (event, { connectionId }) => {
         const conn = activeConnections.get(connectionId);
         if (conn) {
-            conn.end();
-            activeConnections.delete(connectionId);
-            activeConnections.delete(`${connectionId}_shell`);
-            activeConnections.delete(`${connectionId}_sftp`);
-            removeConnectionEncoding(connectionId);
+            cleanupSSHConnection(connectionId, conn, {
+                notify: false,
+                closeClient: true
+            });
         }
         return { success: true };
     });
@@ -282,6 +416,12 @@ function registerSSHHandlers(context, dependencies = {}) {
             conn.sftp((err, sftp) => {
                 if (err) {
                     return reject(err);
+                }
+                if (activeConnections.get(connectionId) !== conn) {
+                    if (sftp && typeof sftp.end === 'function') {
+                        try { sftp.end(); } catch (e) {}
+                    }
+                    return reject(new Error('SSH连接不存在或已断开'));
                 }
                 activeConnections.set(`${connectionId}_sftp`, sftp);
                 resolve(sftp);

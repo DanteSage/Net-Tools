@@ -5,6 +5,10 @@ const { Writable } = require('stream');
 const dhcp = require('dhcp');
 
 const { registerSSHHandlers } = require('../main/connections/ssh');
+const {
+    encodeString,
+    setConnectionEncoding
+} = require('../main/connections/encoding-manager');
 const { executeSSHTarget } = require('../main/batch/executor');
 const FtpServerBackend = require('../main/tools/ftp-server-backend');
 const {
@@ -28,9 +32,12 @@ class FakeIpcMain {
     }
 }
 
-function createSSHHandlerHarness(connectionId, connection) {
+function createSSHHandlerHarness(connectionId, connection, dependencies = {}) {
     const ipcMain = new FakeIpcMain();
-    const activeConnections = new Map([[connectionId, connection]]);
+    const activeConnections = new Map();
+    if (connectionId && connection) {
+        activeConnections.set(connectionId, connection);
+    }
     const messages = [];
     const mainWindow = {
         isDestroyed: () => false,
@@ -44,7 +51,7 @@ function createSSHHandlerHarness(connectionId, connection) {
         activeConnections,
         getMainWindow: () => mainWindow,
         isQuitting: () => false
-    }, { ipcMain });
+    }, { ipcMain, ...dependencies });
 
     return { activeConnections, handlers: ipcMain.handlers, messages };
 }
@@ -65,6 +72,285 @@ function waitFor(predicate, timeout = 2000) {
 }
 
 test.describe('network error handling', () => {
+    test('passive SSH disconnect clears the client, shell, SFTP and encoding once', async () => {
+        const stream = new EventEmitter();
+        stream.destroyed = false;
+        stream.writable = true;
+        stream.destroy = () => { stream.destroyed = true; };
+        let client;
+
+        class FakeClient extends EventEmitter {
+            constructor() {
+                super();
+                this.endCalls = 0;
+                client = this;
+            }
+
+            connect() {
+                queueMicrotask(() => this.emit('ready'));
+            }
+
+            setNoDelay() {}
+
+            shell(windowOptions, shellOptions, callback) {
+                callback(null, stream);
+            }
+
+            end() {
+                this.endCalls += 1;
+            }
+        }
+
+        const harness = createSSHHandlerHarness(null, null, {
+            ssh2: { Client: FakeClient }
+        });
+        const connected = await harness.handlers.get('ssh:connect')({}, {
+            host: '192.0.2.20',
+            username: 'admin'
+        });
+        const shell = await harness.handlers.get('ssh:shell')({}, {
+            connectionId: connected.connectionId,
+            cols: 120,
+            rows: 40
+        });
+        harness.activeConnections.set(`${connected.connectionId}_sftp`, {});
+        setConnectionEncoding(connected.connectionId, 'latin1');
+        expect(encodeString(connected.connectionId, '\u00e9')).toEqual(Buffer.from([0xe9]));
+
+        client.emit('error', new Error('socket reset'));
+        client.emit('end');
+        client.emit('close');
+        stream.emit('close');
+
+        expect(connected.success).toBe(true);
+        expect(shell.success).toBe(true);
+        expect(harness.activeConnections.has(connected.connectionId)).toBe(false);
+        expect(harness.activeConnections.has(`${connected.connectionId}_shell`)).toBe(false);
+        expect(harness.activeConnections.has(`${connected.connectionId}_sftp`)).toBe(false);
+        expect(encodeString(connected.connectionId, '\u00e9')).toEqual(Buffer.from([0xc3, 0xa9]));
+        expect(client.endCalls).toBe(1);
+        expect(harness.messages.filter(item => item.channel === 'ssh:close')).toEqual([
+            {
+                channel: 'ssh:close',
+                payload: {
+                    connectionId: connected.connectionId,
+                    error: 'socket reset'
+                }
+            }
+        ]);
+    });
+
+    test('SSH failure before ready does not create a connection or report a disconnect', async () => {
+        class FakeClient extends EventEmitter {
+            connect() {
+                queueMicrotask(() => {
+                    this.emit('error', new Error('authentication failed'));
+                    this.emit('close');
+                });
+            }
+        }
+
+        const harness = createSSHHandlerHarness(null, null, {
+            ssh2: { Client: FakeClient }
+        });
+        const result = await harness.handlers.get('ssh:connect')({}, {
+            host: '192.0.2.21',
+            username: 'admin'
+        });
+
+        expect(result).toEqual({ success: false, error: 'authentication failed' });
+        expect(harness.activeConnections.size).toBe(0);
+        expect(harness.messages.filter(item => item.channel === 'ssh:close')).toEqual([]);
+    });
+
+    test('SSH close before ready settles even when no error event is emitted', async () => {
+        class FakeClient extends EventEmitter {
+            connect() {
+                queueMicrotask(() => {
+                    this.emit('end');
+                    this.emit('close');
+                });
+            }
+        }
+
+        const harness = createSSHHandlerHarness(null, null, {
+            ssh2: { Client: FakeClient }
+        });
+        const result = await harness.handlers.get('ssh:connect')({}, {
+            host: '192.0.2.24',
+            username: 'admin'
+        });
+
+        expect(result).toEqual({
+            success: false,
+            error: '连接在建立完成前已关闭'
+        });
+        expect(harness.activeConnections.size).toBe(0);
+        expect(harness.messages.filter(item => item.channel === 'ssh:close')).toEqual([]);
+    });
+
+    test('SSH client close without a prior error clears the live connection', async () => {
+        let client;
+
+        class FakeClient extends EventEmitter {
+            constructor() {
+                super();
+                client = this;
+            }
+
+            connect() {
+                queueMicrotask(() => this.emit('ready'));
+            }
+
+            setNoDelay() {}
+        }
+
+        const harness = createSSHHandlerHarness(null, null, {
+            ssh2: { Client: FakeClient }
+        });
+        const connected = await harness.handlers.get('ssh:connect')({}, {
+            host: '192.0.2.22',
+            username: 'admin'
+        });
+
+        client.emit('close');
+
+        expect(harness.activeConnections.has(connected.connectionId)).toBe(false);
+        expect(harness.messages.filter(item => item.channel === 'ssh:close')).toEqual([
+            {
+                channel: 'ssh:close',
+                payload: { connectionId: connected.connectionId }
+            }
+        ]);
+    });
+
+    test('late SSH shell and SFTP callbacks cannot revive a closed connection', async () => {
+        let client;
+        let shellCallback;
+        let sftpCallback;
+
+        class FakeClient extends EventEmitter {
+            constructor() {
+                super();
+                client = this;
+            }
+
+            connect() {
+                queueMicrotask(() => this.emit('ready'));
+            }
+
+            setNoDelay() {}
+
+            shell(windowOptions, shellOptions, callback) {
+                shellCallback = callback;
+            }
+
+            sftp(callback) {
+                sftpCallback = callback;
+            }
+        }
+
+        const harness = createSSHHandlerHarness(null, null, {
+            ssh2: { Client: FakeClient }
+        });
+        const connected = await harness.handlers.get('ssh:connect')({}, {
+            host: '192.0.2.23',
+            username: 'admin'
+        });
+        const shellResultPromise = harness.handlers.get('ssh:shell')({}, {
+            connectionId: connected.connectionId,
+            cols: 120,
+            rows: 40
+        });
+        const sftpResultPromise = harness.handlers.get('sftp:list')({}, {
+            connectionId: connected.connectionId,
+            path: '/'
+        });
+        const lateShell = {
+            destroyCalls: 0,
+            destroy() { this.destroyCalls += 1; }
+        };
+        const lateSftp = {
+            endCalls: 0,
+            end() { this.endCalls += 1; }
+        };
+
+        client.emit('close');
+        shellCallback(null, lateShell);
+        sftpCallback(null, lateSftp);
+
+        await expect(shellResultPromise).resolves.toEqual({
+            success: false,
+            error: '连接不存在或已断开'
+        });
+        await expect(sftpResultPromise).resolves.toEqual({
+            success: false,
+            error: 'SSH连接不存在或已断开'
+        });
+        expect(lateShell.destroyCalls).toBe(1);
+        expect(lateSftp.endCalls).toBe(1);
+        expect(harness.activeConnections.has(`${connected.connectionId}_shell`)).toBe(false);
+        expect(harness.activeConnections.has(`${connected.connectionId}_sftp`)).toBe(false);
+        expect(harness.messages.filter(item => item.channel === 'ssh:close')).toHaveLength(1);
+    });
+
+    test('active SSH disconnect cleans up without reporting a passive close', async () => {
+        const stream = new EventEmitter();
+        stream.destroyed = false;
+        stream.writable = true;
+        let client;
+
+        class FakeClient extends EventEmitter {
+            constructor() {
+                super();
+                this.endCalls = 0;
+                client = this;
+            }
+
+            connect() {
+                queueMicrotask(() => this.emit('ready'));
+            }
+
+            setNoDelay() {}
+
+            shell(windowOptions, shellOptions, callback) {
+                callback(null, stream);
+            }
+
+            end() {
+                this.endCalls += 1;
+                this.emit('end');
+                this.emit('close');
+            }
+        }
+
+        const harness = createSSHHandlerHarness(null, null, {
+            ssh2: { Client: FakeClient }
+        });
+        const connected = await harness.handlers.get('ssh:connect')({}, {
+            host: '192.0.2.25',
+            username: 'admin'
+        });
+        await harness.handlers.get('ssh:shell')({}, {
+            connectionId: connected.connectionId,
+            cols: 120,
+            rows: 40
+        });
+        harness.activeConnections.set(`${connected.connectionId}_sftp`, {});
+
+        const result = await harness.handlers.get('ssh:disconnect')({}, {
+            connectionId: connected.connectionId
+        });
+        stream.emit('close');
+
+        expect(result).toEqual({ success: true });
+        expect(client.endCalls).toBe(1);
+        expect(harness.activeConnections.has(connected.connectionId)).toBe(false);
+        expect(harness.activeConnections.has(`${connected.connectionId}_shell`)).toBe(false);
+        expect(harness.activeConnections.has(`${connected.connectionId}_sftp`)).toBe(false);
+        expect(harness.messages.filter(item => item.channel === 'ssh:close')).toEqual([]);
+    });
+
     test('SSH exec stream error returns failure and later close cannot overwrite it', async () => {
         const stream = new EventEmitter();
         stream.stderr = new EventEmitter();
@@ -91,7 +377,9 @@ test.describe('network error handling', () => {
         stream.destroyed = false;
         stream.writable = true;
         stream.end = () => {};
+        let endCalls = 0;
         const connection = {
+            end: () => { endCalls += 1; },
             shell: (windowOptions, shellOptions, callback) => callback(null, stream)
         };
         const harness = createSSHHandlerHarness('ssh-2', connection);
@@ -108,6 +396,8 @@ test.describe('network error handling', () => {
         stream.emit('close');
 
         expect(harness.activeConnections.has('ssh-2_shell')).toBe(false);
+        expect(harness.activeConnections.has('ssh-2')).toBe(false);
+        expect(endCalls).toBe(1);
         expect(harness.messages.filter(item => item.channel === 'ssh:close')).toEqual([
             {
                 channel: 'ssh:close',
