@@ -34,6 +34,13 @@ test('packaged Electron app launches with its preload bridge', async ({}, testIn
 
         expect(await electronApp.evaluate(() => process.versions.electron)).toBe('43.1.1');
 
+        const processErrorHandlers = await electronApp.evaluate(() => ({
+            uncaughtException: process.listenerCount('uncaughtException'),
+            unhandledRejection: process.listenerCount('unhandledRejection')
+        }));
+        expect(processErrorHandlers.uncaughtException).toBeGreaterThan(0);
+        expect(processErrorHandlers.unhandledRejection).toBeGreaterThan(0);
+
         const mainWindow = await waitForMainWindow(electronApp);
         await mainWindow.waitForLoadState('domcontentloaded', { timeout: 20000 });
         await expect(mainWindow.locator('.nav-menu')).toBeVisible();

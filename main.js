@@ -12,5 +12,8 @@
  * - main/utils/         - 工具函数
  */
 
+const { registerProcessErrorHandlers } = require('./main/utils/process-error-handler');
+registerProcessErrorHandlers();
+
 // 加载模块化入口
 require('./main/index');

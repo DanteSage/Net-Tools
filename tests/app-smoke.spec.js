@@ -35,6 +35,13 @@ test.describe('Net Tools app smoke', () => {
       const electronVersion = await electronApp.evaluate(() => process.versions.electron);
       expect(electronVersion).toBe('43.1.1');
 
+      const processErrorHandlers = await electronApp.evaluate(() => ({
+        uncaughtException: process.listenerCount('uncaughtException'),
+        unhandledRejection: process.listenerCount('unhandledRejection')
+      }));
+      expect(processErrorHandlers.uncaughtException).toBeGreaterThan(0);
+      expect(processErrorHandlers.unhandledRejection).toBeGreaterThan(0);
+
       const mainWindow = await waitForMainWindow(electronApp);
       await mainWindow.waitForLoadState('domcontentloaded', { timeout: 20000 });
       await mainWindow.waitForSelector('.nav-menu', { timeout: 20000 });
