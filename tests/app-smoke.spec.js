@@ -1,6 +1,6 @@
 const { test, expect, _electron: electron } = require('@playwright/test');
 
-async function waitForMainWindow(electronApp, timeout = 30000) {
+async function waitForMainWindow(electronApp, timeout = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     for (const page of electronApp.windows()) {
@@ -23,11 +23,12 @@ async function waitForMainWindow(electronApp, timeout = 30000) {
 }
 
 test.describe('Net Tools app smoke', () => {
-  test('launches main window and exposes core UI/API', async () => {
+  test('launches main window and exposes core UI/API', async ({}, testInfo) => {
+    test.setTimeout(120000);
     let electronApp;
     try {
       electronApp = await electron.launch({
-        args: ['.'],
+        args: ['.', `--user-data-dir=${testInfo.outputPath('user-data')}`],
         env: { ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
       });
 

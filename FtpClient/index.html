@@ -1236,6 +1236,31 @@
             }
         }
 
+        function resetConnectionUi() {
+            const previousConnectionId = connectionId;
+            isConnected = false;
+            connectionId = null;
+            btnConnect.className = 'btn btn-primary';
+            btnConnect.textContent = '连接';
+            btnConnect.disabled = false;
+            btnRemoteRefresh.disabled = true;
+            document.getElementById('remote-table').classList.add('empty-table');
+            remoteTbody.innerHTML = '<tr><td colspan="3" class="empty-text">暂无数据</td></tr>';
+            remoteHistorySelect.innerHTML = '<option value="">请选择</option>';
+            remotePathInput.value = '/';
+            if (previousConnectionId) {
+                ipcRenderer.removeAllListeners(`ftp:log:${previousConnectionId}`);
+            }
+        }
+
+        ipcRenderer.on('ftp:disconnected', (event, data) => {
+            if (!data || data.connectionId !== connectionId) return;
+            const reason = data.error || 'FTP 控制连接已断开';
+            appendLog('error', reason);
+            showToast(reason, 'error');
+            resetConnectionUi();
+        });
+
         // Connection Handlers
         async function handleConnect() {
             if (isConnected) {
@@ -1248,17 +1273,7 @@
                     appendLog('system', 'FTP 连接已成功断开');
                 } catch(e) {}
 
-                isConnected = false;
-                connectionId = null;
-                btnConnect.className = 'btn btn-primary';
-                btnConnect.textContent = '连接';
-                btnConnect.disabled = false;
-                btnRemoteRefresh.disabled = true;
-
-                document.getElementById('remote-table').classList.add('empty-table');
-                remoteTbody.innerHTML = '<tr><td colspan="3" class="empty-text">暂无数据</td></tr>';
-                remoteHistorySelect.innerHTML = '<option value="">请选择</option>';
-                remotePathInput.value = '/';
+                resetConnectionUi();
                 return;
             }
 

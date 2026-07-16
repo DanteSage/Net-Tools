@@ -16,9 +16,28 @@ class FakeWritable extends EventEmitter {
     }
 
     write(chunk, callback) {
-        this.writes.push({ chunk: Buffer.from(chunk), callback });
+        this.writes.push({
+            chunk: Buffer.from(chunk),
+            callback,
+            timestamp: process.hrtime.bigint()
+        });
         return this.results.length > 0 ? this.results.shift() : true;
     }
+}
+
+function waitForWriteCount(stream, count, timeout = 500) {
+    return new Promise((resolve, reject) => {
+        const startedAt = Date.now();
+        const timer = setInterval(() => {
+            if (stream.writes.length >= count) {
+                clearInterval(timer);
+                resolve();
+            } else if (Date.now() - startedAt >= timeout) {
+                clearInterval(timer);
+                reject(new Error(`等待 ${count} 次流写入超时`));
+            }
+        }, 5);
+    });
 }
 
 test.describe('stream write queue', () => {
@@ -73,17 +92,14 @@ test.describe('stream write queue', () => {
         const completed = queue.enqueue('abc');
 
         expect(stream.writes.map((item) => item.chunk.toString())).toEqual(['a']);
-        stream.writes[0].callback();
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        expect(stream.writes).toHaveLength(1);
-
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        expect(stream.writes.map((item) => item.chunk.toString())).toEqual(['a', 'b']);
-        stream.writes[1].callback();
-
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await waitForWriteCount(stream, 3);
         expect(stream.writes.map((item) => item.chunk.toString())).toEqual(['a', 'b', 'c']);
-        stream.writes[2].callback();
+        const firstGapMs = Number(stream.writes[1].timestamp - stream.writes[0].timestamp) / 1e6;
+        const secondGapMs = Number(stream.writes[2].timestamp - stream.writes[1].timestamp) / 1e6;
+        expect(firstGapMs).toBeGreaterThanOrEqual(8);
+        expect(secondGapMs).toBeGreaterThanOrEqual(8);
+
+        for (const write of stream.writes) write.callback();
         await completed;
     });
 

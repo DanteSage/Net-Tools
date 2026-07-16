@@ -11,6 +11,7 @@ const { createToolWindow } = require('../utils/toolWindow');
 
 let netcatWindow = null;
 let clientSocket = null;        // 当前活动的客户端连接
+let clientConnectAttempt = null;
 let serverInstance = null;      // 当前监听的服务端
 let serverClients = new Map();  // 服务端的连入客户端：id -> socket
 let serverClientIdSeq = 1;
@@ -67,7 +68,9 @@ function sendToWindow(channel, payload) {
  * 安全地销毁所有连接，用于窗口关闭时
  */
 function cleanupAll() {
-    if (clientSocket) {
+    if (clientConnectAttempt) {
+        clientConnectAttempt.cancel('窗口已关闭');
+    } else if (clientSocket) {
         try { clientSocket.destroy(); } catch (_) {}
         clientSocket = null;
     }
@@ -87,20 +90,60 @@ function cleanupAll() {
 /**
  * 建立 TCP 客户端连接
  */
-function clientConnect(host, port, timeout) {
+function clientConnect(host, port, timeout, dependencies = {}) {
     return new Promise((resolve) => {
+        if (clientConnectAttempt) {
+            clientConnectAttempt.cancel('连接已被新的请求替换');
+        }
         if (clientSocket) {
             try { clientSocket.destroy(); } catch (_) {}
             clientSocket = null;
         }
 
-        const sock = new net.Socket();
+        const createSocket = dependencies.createSocket || (() => new net.Socket());
+        let sock;
+        try {
+            sock = createSocket();
+        } catch (error) {
+            resolve({ success: false, error: error.message });
+            return;
+        }
         clientSocket = sock;
+        let settled = false;
+
+        const isCurrent = () => clientSocket === sock;
+        const settle = (result, destroySocket = false) => {
+            if (settled) return false;
+            settled = true;
+            if (clientConnectAttempt && clientConnectAttempt.socket === sock) {
+                clientConnectAttempt = null;
+            }
+            if (!result.success && isCurrent()) {
+                clientSocket = null;
+            }
+            if (destroySocket) {
+                try { sock.destroy(); } catch (_) {}
+            }
+            resolve(result);
+            return true;
+        };
+        const cancel = (message = '连接已取消') => {
+            if (isCurrent()) {
+                sendToWindow('netcat:client-state', { state: 'closed', hadError: false });
+            }
+            settle({ success: false, error: message }, true);
+        };
+
+        clientConnectAttempt = { socket: sock, cancel };
         sock.setTimeout(Math.max(timeout || 5000, 1000));
 
         sendToWindow('netcat:client-state', { state: 'connecting', host, port });
 
         sock.once('connect', () => {
+            if (!isCurrent()) {
+                settle({ success: false, error: '连接已失效' }, true);
+                return;
+            }
             sock.setTimeout(0);
             sendToWindow('netcat:client-state', {
                 state: 'connected',
@@ -108,10 +151,11 @@ function clientConnect(host, port, timeout) {
                 port,
                 local: { address: sock.localAddress, port: sock.localPort }
             });
-            resolve({ success: true });
+            settle({ success: true });
         });
 
         sock.on('data', (buf) => {
+            if (!isCurrent()) return;
             sendToWindow('netcat:client-data', {
                 time: Date.now(),
                 size: buf.length,
@@ -121,30 +165,38 @@ function clientConnect(host, port, timeout) {
         });
 
         sock.once('timeout', () => {
-            sendToWindow('netcat:client-state', { state: 'error', message: '连接超时' });
-            try { sock.destroy(); } catch (_) {}
+            if (isCurrent()) {
+                sendToWindow('netcat:client-state', { state: 'error', message: '连接超时' });
+            }
+            settle({ success: false, error: '连接超时' }, true);
         });
 
         sock.once('error', (err) => {
-            sendToWindow('netcat:client-state', { state: 'error', message: err.message });
+            const current = isCurrent();
+            if (current) {
+                sendToWindow('netcat:client-state', { state: 'error', message: err.message });
+            }
+            if (!settle({ success: false, error: err.message }, true) && current) {
+                clientSocket = null;
+                try { sock.destroy(); } catch (_) {}
+            }
         });
 
         sock.once('close', (hadError) => {
-            if (clientSocket === sock) {
+            if (isCurrent()) {
                 clientSocket = null;
+                sendToWindow('netcat:client-state', { state: 'closed', hadError: !!hadError });
             }
-            sendToWindow('netcat:client-state', { state: 'closed', hadError: !!hadError });
-            // 如果还在握手阶段就关闭，告诉调用方失败
-            if (sock.connecting) {
-                resolve({ success: false, error: '连接被关闭' });
-            }
+            settle({ success: false, error: '连接被关闭' });
         });
 
         try {
             sock.connect(port, host);
         } catch (e) {
-            sendToWindow('netcat:client-state', { state: 'error', message: e.message });
-            resolve({ success: false, error: e.message });
+            if (isCurrent()) {
+                sendToWindow('netcat:client-state', { state: 'error', message: e.message });
+            }
+            settle({ success: false, error: e.message }, true);
         }
     });
 }
@@ -352,9 +404,13 @@ function registerNetcatHandlers(context) {
     });
 
     ipcMain.handle('netcat:client-disconnect', async () => {
-        if (clientSocket) {
-            try { clientSocket.destroy(); } catch (_) {}
+        if (clientConnectAttempt) {
+            clientConnectAttempt.cancel('连接已取消');
+        } else if (clientSocket) {
+            const socket = clientSocket;
             clientSocket = null;
+            sendToWindow('netcat:client-state', { state: 'closed', hadError: false });
+            try { socket.destroy(); } catch (_) {}
         }
         return { success: true };
     });
@@ -429,4 +485,8 @@ function registerNetcatHandlers(context) {
     });
 }
 
-module.exports = { registerNetcatHandlers, cleanupNetcat: cleanupAll };
+module.exports = {
+    clientConnect,
+    registerNetcatHandlers,
+    cleanupNetcat: cleanupAll
+};

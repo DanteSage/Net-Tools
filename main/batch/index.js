@@ -5,23 +5,56 @@ const fs = require('fs');
 const path = require('path');
 const { ipcMain } = require('electron');
 const { cleanBackupOutput } = require('../utils/helpers');
-const { getBackupDir } = require('../config');
 const { executeTarget } = require('./executor');
 
-// 批量执行状态
-let batchExecutionState = { running: false, paused: false, shouldStop: false };
+// 保持稳定引用，确保执行器、暂停和停止始终操作同一次状态对象。
+const batchExecutionState = { running: false, paused: false, shouldStop: false };
+
+function createFailedResult(target, error) {
+    const safeTarget = target && typeof target === 'object' ? target : {};
+    const now = new Date().toISOString();
+    return {
+        name: safeTarget.name || safeTarget.host || '未知目标',
+        host: safeTarget.host || '',
+        type: safeTarget.type || '',
+        status: 'failed',
+        output: '',
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: now,
+        startTime: Date.now(),
+        duration: 0
+    };
+}
+
+function createSummary(results) {
+    return {
+        total: results.length,
+        success: results.filter(result => result.status === 'success').length,
+        failed: results.filter(result => result.status === 'failed').length
+    };
+}
 
 /**
  * 注册批量执行相关 IPC 处理程序
  * @param {Object} context - 上下文对象
  */
-function registerBatchHandlers(context) {
+function registerBatchHandlers(context, dependencies = {}) {
+    const ipc = dependencies.ipcMain || ipcMain;
+    const runTarget = dependencies.executeTarget || executeTarget;
+    const fsModule = dependencies.fs || fs;
+    const resolveBackupDir = dependencies.getBackupDir || (() => require('../config').getBackupDir());
     
     // 批量执行命令
-    ipcMain.handle('batch:execute', async (event, { targets, commands, options = {} }) => {
+    ipc.handle('batch:execute', async (event, { targets, commands, options = {} }) => {
+        if (batchExecutionState.running) {
+            return { success: false, error: '已有批量任务正在执行' };
+        }
+
         const results = [];
-        batchExecutionState = { running: true, paused: false, shouldStop: false };
-        
+        const executionState = batchExecutionState;
+        Object.assign(executionState, { running: true, paused: false, shouldStop: false });
+        const normalizedOptions = options && typeof options === 'object' ? options : {};
+
         const {
             parallel = true,
             parallelCount = 5,
@@ -30,92 +63,104 @@ function registerBatchHandlers(context) {
             stopOnError = false,
             saveBackup = false,
             variables = {}
-        } = options;
-        
+        } = normalizedOptions;
+        const safeTargets = Array.isArray(targets) ? targets : [];
+        const safeCommands = Array.isArray(commands) ? commands : [];
+        const safeParallelCount = Math.max(1, Math.min(parseInt(parallelCount, 10) || 1, 100));
+
         const executionOptions = {
             timeout,
             cmdDelay,
             saveBackup,
             variables
         };
-        
-        // 执行所有目标
-        if (parallel && parallelCount > 1) {
-            // 并行执行
-            const chunks = [];
-            for (let i = 0; i < targets.length; i += parallelCount) {
-                chunks.push(targets.slice(i, i + parallelCount));
-            }
-            
-            for (const chunk of chunks) {
-                if (batchExecutionState.shouldStop) break;
-                
-                const chunkResults = await Promise.all(
-                    chunk.map(target => executeTarget(target, commands, executionOptions, batchExecutionState, context))
-                );
-                results.push(...chunkResults);
-                
-                if (stopOnError && chunkResults.some(r => r.status === 'failed')) {
-                    break;
-                }
-            }
-        } else {
-            // 串行执行
-            for (const target of targets) {
-                if (batchExecutionState.shouldStop) break;
-                
-                const result = await executeTarget(target, commands, executionOptions, batchExecutionState, context);
-                results.push(result);
-                
-                if (stopOnError && result.status === 'failed') {
-                    break;
-                }
-            }
-        }
-        
-        batchExecutionState.running = false;
-        
-        // 保存配置备份
-        if (saveBackup) {
+
+        const executeSafely = async (target) => {
             try {
-                const backupDir = getBackupDir();
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                for (const result of results) {
-                    if (result.status === 'success' && result.output) {
-                        const backupFileName = `${result.name || result.host}_${timestamp}.txt`;
-                        const cleanedOutput = cleanBackupOutput(result.output);
-                        fs.writeFileSync(
-                            path.join(backupDir, backupFileName),
-                            cleanedOutput,
-                            'utf-8'
-                        );
-                    }
+                return await runTarget(target, safeCommands, executionOptions, executionState, context);
+            } catch (error) {
+                const failedResult = createFailedResult(target, error);
+                const mainWindow = context.getMainWindow();
+                if (!context.isQuitting() && mainWindow && !mainWindow.isDestroyed()) {
+                    try { mainWindow.webContents.send('batch:progress', { ...failedResult }); } catch (_) {}
                 }
-                console.log(`[Backup] 已保存 ${results.filter(r => r.status === 'success').length} 个配置备份`);
-            } catch (e) {
-                console.error('保存配置备份失败:', e);
-            }
-        }
-        
-        return { 
-            success: true, 
-            results,
-            summary: {
-                total: results.length,
-                success: results.filter(r => r.status === 'success').length,
-                failed: results.filter(r => r.status === 'failed').length
+                return failedResult;
             }
         };
+
+        try {
+            // 执行所有目标
+            if (parallel && safeParallelCount > 1) {
+                const chunks = [];
+                for (let i = 0; i < safeTargets.length; i += safeParallelCount) {
+                    chunks.push(safeTargets.slice(i, i + safeParallelCount));
+                }
+
+                for (const chunk of chunks) {
+                    if (executionState.shouldStop) break;
+                    // executeSafely 保证整块任务全部 settle 后才释放全局运行锁。
+                    const chunkResults = await Promise.all(chunk.map(executeSafely));
+                    results.push(...chunkResults);
+
+                    if (stopOnError && chunkResults.some(result => result.status === 'failed')) {
+                        break;
+                    }
+                }
+            } else {
+                for (const target of safeTargets) {
+                    if (executionState.shouldStop) break;
+                    const result = await executeSafely(target);
+                    results.push(result);
+
+                    if (stopOnError && result.status === 'failed') {
+                        break;
+                    }
+                }
+            }
+
+            // 保存配置备份
+            if (saveBackup) {
+                try {
+                    const backupDir = resolveBackupDir();
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    for (const result of results) {
+                        if (result.status === 'success' && result.output) {
+                            const backupFileName = `${result.name || result.host}_${timestamp}.txt`;
+                            const cleanedOutput = cleanBackupOutput(result.output);
+                            fsModule.writeFileSync(
+                                path.join(backupDir, backupFileName),
+                                cleanedOutput,
+                                'utf-8'
+                            );
+                        }
+                    }
+                    console.log(`[Backup] 已保存 ${results.filter(r => r.status === 'success').length} 个配置备份`);
+                } catch (e) {
+                    console.error('保存配置备份失败:', e);
+                }
+            }
+
+            return { success: true, results, summary: createSummary(results) };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                results,
+                summary: createSummary(results)
+            };
+        } finally {
+            Object.assign(executionState, { running: false, paused: false, shouldStop: false });
+        }
     });
 
     // 暂停/恢复批量执行
-    ipcMain.handle('batch:pause', (event, pause) => {
+    ipc.handle('batch:pause', (event, pause) => {
         batchExecutionState.paused = pause;
         return { success: true };
     });
 
     // 停止批量执行
-    ipcMain.handle('batch:stop', () => {
+    ipc.handle('batch:stop', () => {
         batchExecutionState.shouldStop = true;
         return { success: true };
     });

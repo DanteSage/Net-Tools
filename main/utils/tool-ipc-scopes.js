@@ -42,7 +42,7 @@ const TOOL_IPC_SCOPES = Object.freeze({
     },
     'ftp-client': {
         invoke: ['ftp:*'],
-        receive: ['ftp:progress', 'ftp:log:*'],
+        receive: ['ftp:progress', 'ftp:log:*', 'ftp:disconnected'],
         capabilities: ['filesystem', 'path', 'system']
     },
     'ftp-server': {
