@@ -11,10 +11,15 @@ const state = {
     filteredPackets: [],
     selectedIdx: -1,
     isCapturing: false,
+    isImporting: false,
+    captureRequestPending: false,
+    importRequestPending: false,
     displayFilter: '',
     aiConfig: {},
     diagnosis: null,
     tsharkVersion: '',
+    tsharkAvailable: false,
+    tsharkOutdated: false,
     stats: {
         total: 0, bytes: 0, retrans: 0, rsts: 0,
         outOfOrders: 0, duplicateAcks: 0, synCount: 0,
@@ -104,34 +109,24 @@ ipcRenderer.on('theme:changed', (event, theme) => {
 async function checkTshark() {
     const customPath = state.aiConfig.tsharkPath || '';
     const result = await ipcRenderer.invoke('tshark:checkVersion', customPath || undefined);
-    const el = $('tshark-status');
     if (result.found) {
         state.tsharkVersion = result.version || '';
         const majorVer = parseInt((result.version || '0').split('.')[0], 10);
+        state.tsharkAvailable = true;
+        state.tsharkOutdated = majorVer < 3;
         if (majorVer < 3) {
-            el.textContent = '⚠ tshark ' + result.version + '（版本过低）';
-            el.className = 'status-pill error';
-            $('btn-start').disabled = false;
             $('btn-clear').disabled = false;
             showToast('tshark 版本过低（< 3.0），TLS 等检测功能不可用，建议升级至 4.x', 'error');
-        } else if (majorVer < 4) {
-            el.textContent = '✓ tshark ' + result.version;
-            el.className = 'status-pill ready';
-            $('btn-start').disabled = false;
-            $('btn-clear').disabled = false;
         } else {
-            el.textContent = '✓ tshark ' + result.version;
-            el.className = 'status-pill ready';
-            $('btn-start').disabled = false;
             $('btn-clear').disabled = false;
         }
     } else {
         state.tsharkVersion = '';
-        el.textContent = '✗ 未找到 tshark';
-        el.className = 'status-pill error';
-        $('btn-start').disabled = true;
+        state.tsharkAvailable = false;
+        state.tsharkOutdated = false;
         showToast('未找到 tshark，请安装 Wireshark 或在设置中指定路径', 'error');
     }
+    renderTsharkActivityState();
 }
 
 // ==================== 接口列表 ====================
@@ -206,31 +201,70 @@ function updateModelBadge() {
 
 // ==================== 抓包控制 ====================
 
-async function startCapture() {
-    const interfaceIndex = $('interface-select').value || '1';
-    const displayFilter = state.displayFilter;
+function renderTsharkActivityState() {
+    const active = state.isCapturing || state.isImporting;
+    const busy = active || state.captureRequestPending || state.importRequestPending;
+    $('btn-start').disabled = busy || !state.tsharkAvailable;
+    $('btn-import').disabled = busy || !state.tsharkAvailable;
+    $('btn-stop').disabled = !active;
 
-    const result = await ipcRenderer.invoke('tshark:start', {
-        interfaceIndex,
-        displayFilter: displayFilter || undefined
-    });
-
-    if (result.success) {
-        state.isCapturing = true;
-        $('btn-start').disabled = true;
-        $('btn-stop').disabled = false;
-        $('btn-ai-diagnose').disabled = true;
-        $('btn-ai-start-guide').disabled = true;
+    if (state.isCapturing) {
         $('tshark-status').textContent = '● 捕获中';
         $('tshark-status').className = 'status-pill capturing';
-        showToast('已开始捕获，需要管理员权限', 'info');
-    } else {
-        showToast('启动失败: ' + result.error, 'error');
+    } else if (state.isImporting) {
+        $('tshark-status').textContent = '● 文件解析中';
+        $('tshark-status').className = 'status-pill capturing';
+    } else if (!state.captureRequestPending && !state.importRequestPending) {
+        if (!state.tsharkAvailable) {
+            $('tshark-status').textContent = '✗ 未找到 tshark';
+            $('tshark-status').className = 'status-pill error';
+        } else if (state.tsharkOutdated) {
+            $('tshark-status').textContent = '⚠ tshark ' + state.tsharkVersion + '（版本过低）';
+            $('tshark-status').className = 'status-pill error';
+        } else {
+            $('tshark-status').textContent = state.tsharkVersion
+                ? '✓ tshark ' + state.tsharkVersion
+                : '✓ tshark 就绪';
+            $('tshark-status').className = 'status-pill ready';
+        }
+    }
+}
+
+async function startCapture() {
+    if (state.isCapturing || state.isImporting || state.captureRequestPending || state.importRequestPending) return;
+    const interfaceIndex = $('interface-select').value || '1';
+    const displayFilter = state.displayFilter;
+    state.captureRequestPending = true;
+    renderTsharkActivityState();
+
+    try {
+        const result = await ipcRenderer.invoke('tshark:start', {
+            interfaceIndex,
+            displayFilter: displayFilter || undefined
+        });
+
+        if (result.success) {
+            state.isCapturing = true;
+            $('btn-ai-diagnose').disabled = true;
+            $('btn-ai-start-guide').disabled = true;
+            showToast('已开始捕获，需要管理员权限', 'info');
+        } else {
+            showToast('启动失败: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showToast('启动失败: ' + error.message, 'error');
+    } finally {
+        state.captureRequestPending = false;
+        renderTsharkActivityState();
     }
 }
 
 async function stopCapture() {
-    await ipcRenderer.invoke('tshark:stop');
+    try {
+        await ipcRenderer.invoke('tshark:stop');
+    } catch (error) {
+        showToast('停止失败: ' + error.message, 'error');
+    }
 }
 
 function clearPackets() {
@@ -251,12 +285,29 @@ function clearPackets() {
 // ==================== 导入 PCAP ====================
 
 async function importPcap() {
-    const result = await ipcRenderer.invoke('tshark:importFile');
-    if (!result.success) {
-        if (result.error !== '取消') showToast('导入失败: ' + result.error, 'error');
-        return;
+    if (state.isCapturing || state.isImporting || state.captureRequestPending || state.importRequestPending) return;
+    state.importRequestPending = true;
+    renderTsharkActivityState();
+
+    try {
+        const result = await ipcRenderer.invoke('tshark:importFile');
+        if (!result.success) {
+            if (result.error === '取消') return;
+            if (result.cancelled) {
+                showToast(result.error || '已停止解析文件', 'info');
+            } else {
+                showToast('导入失败: ' + result.error, 'error');
+            }
+            return;
+        }
+        showToast(`已加载 ${state.packets.length} 个数据包 (${result.fileName})`, 'success');
+    } catch (error) {
+        showToast('导入失败: ' + error.message, 'error');
+    } finally {
+        state.importRequestPending = false;
+        state.isImporting = false;
+        renderTsharkActivityState();
     }
-    showToast(`已加载 ${state.packets.length} 个数据包 (${result.fileName})`, 'success');
 }
 
 // ==================== 数据摄入 ====================
@@ -1799,6 +1850,9 @@ function bindIpcEvents() {
     });
 
     ipcRenderer.on('tshark:importStart', () => {
+        state.importRequestPending = false;
+        state.isImporting = true;
+        renderTsharkActivityState();
         clearPackets();
         showToast('正在解析文件...', 'info');
     });
@@ -1806,14 +1860,7 @@ function bindIpcEvents() {
     ipcRenderer.on('tshark:stopped', (event, info) => {
         const wasCapturing = state.isCapturing;
         state.isCapturing = false;
-        $('btn-start').disabled = false;
-        $('btn-stop').disabled = true;
-        if (state.tsharkVersion) {
-            $('tshark-status').textContent = '✓ tshark ' + state.tsharkVersion;
-        } else {
-            $('tshark-status').textContent = '✓ tshark 就绪';
-        }
-        $('tshark-status').className = 'status-pill ready';
+        renderTsharkActivityState();
         // 停止时立即刷新 UI（不等定时器）
         if (_uiDirty) _flushUi();
         updatePktCount();

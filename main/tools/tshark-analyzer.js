@@ -8,7 +8,7 @@ const { ipcMain, dialog, BrowserWindow, app, safeStorage } = require('electron')
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
-const { createToolWindow } = require('../utils/toolWindow');
+const { createToolWindow: defaultCreateToolWindow } = require('../utils/toolWindow');
 const {
     validateCustomTsharkPath,
     checkTsharkVersion,
@@ -87,6 +87,8 @@ const TSHARK_FIELDS = [
 ];
 
 const CLEARTEXT_PORTS = new Set(['21', '23', '25', '110', '143', '69']);
+const TSHARK_IMPORT_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_IMPORT_STDERR_LENGTH = 8192;
 
 const AI_SYSTEM_PROMPT = `你是一位资深网络运维专家（CCIE级别），擅长通过流量分析精准定位网络故障。
 
@@ -197,7 +199,6 @@ VPN/IKE故障:
 // ==================== 模块状态 ====================
 
 let analyzerWindow = null;
-let captureProcess = null;
 let packetCounter = 0;
 let cachedTsharkPath = null;
 let tmpPcapPath = null;
@@ -208,19 +209,266 @@ let tmpPcapPath = null;
  * 强制终止抓包进程（Windows 需杀整个进程树）
  * @private
  */
-function _killProcess(proc) {
+function _killProcess(proc, dependencies = {}) {
     if (!proc) return;
-    try {
-        if (process.platform === 'win32' && proc.pid) {
-            execFile(
+    const platform = dependencies.platform || process.platform;
+    const runExecFile = dependencies.execFile || execFile;
+    if (platform === 'win32' && proc.pid) {
+        try {
+            runExecFile(
                 'taskkill.exe',
                 ['/F', '/T', '/PID', String(proc.pid)],
-                { windowsHide: true, shell: false },
-                () => {}
+                { windowsHide: true, shell: false, timeout: 5000 },
+                (error) => {
+                    if (!error) return;
+                    try { proc.kill(); } catch (_) {}
+                }
             );
+            return;
+        } catch (_) {
+            // Fall through to direct termination when taskkill cannot start.
         }
-        proc.kill();
-    } catch (_) {}
+    }
+    try { proc.kill(); } catch (_) {}
+}
+
+function createTsharkImportTask(options = {}) {
+    const spawnProcess = typeof options.spawnProcess === 'function' ? options.spawnProcess : spawn;
+    const killProcess = typeof options.killProcess === 'function' ? options.killProcess : _killProcess;
+    const setTimeoutFn = typeof options.setTimeoutFn === 'function' ? options.setTimeoutFn : setTimeout;
+    const clearTimeoutFn = typeof options.clearTimeoutFn === 'function' ? options.clearTimeoutFn : clearTimeout;
+    const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+        ? Math.max(1, Math.floor(options.timeoutMs))
+        : TSHARK_IMPORT_TIMEOUT_MS;
+    const onPackets = typeof options.onPackets === 'function' ? options.onPackets : () => {};
+    const owner = options.owner || null;
+    const filePath = String(options.filePath || '');
+
+    let proc = null;
+    let timer = null;
+    let settled = false;
+    let buffer = '';
+    let batch = [];
+    let stderrTail = '';
+    let totalPkts = 0;
+    let resolveTask;
+
+    const promise = new Promise(resolve => {
+        resolveTask = resolve;
+    });
+
+    const onOwnerDestroyed = () => {
+        finish({ success: false, error: '分析窗口已关闭', cancelled: true }, true);
+    };
+
+    const removeOwnerListener = () => {
+        if (!owner) return;
+        try {
+            if (typeof owner.removeListener === 'function') {
+                owner.removeListener('destroyed', onOwnerDestroyed);
+            } else if (typeof owner.off === 'function') {
+                owner.off('destroyed', onOwnerDestroyed);
+            }
+        } catch (_) {}
+    };
+
+    function finish(result, terminateProcess = false) {
+        if (settled) return false;
+        settled = true;
+        if (timer !== null) {
+            try { clearTimeoutFn(timer); } catch (_) {}
+            timer = null;
+        }
+        removeOwnerListener();
+        buffer = '';
+        batch = [];
+        if (terminateProcess && proc) {
+            try { killProcess(proc); } catch (_) {}
+        }
+        resolveTask(result);
+        return true;
+    }
+
+    const flushBatch = () => {
+        if (settled || batch.length === 0) return !settled;
+        const packets = batch;
+        batch = [];
+        try {
+            onPackets(packets);
+            return true;
+        } catch (error) {
+            finish({ success: false, error: `推送解析结果失败: ${error.message}` }, true);
+            return false;
+        }
+    };
+
+    const parseLine = (line) => {
+        const text = line.trim();
+        if (!text || text.startsWith('{"index"')) return;
+        const packet = _parseEkPacket(text);
+        if (!packet) return;
+        batch.push(packet);
+        totalPkts += 1;
+    };
+
+    const task = {
+        promise,
+        stop(reason = '导入已停止') {
+            return finish({ success: false, error: reason, cancelled: true }, true);
+        },
+        isSettled() {
+            return settled;
+        },
+        get process() {
+            return proc;
+        }
+    };
+
+    if (owner && typeof owner.once === 'function') {
+        try {
+            owner.once('destroyed', onOwnerDestroyed);
+        } catch (error) {
+            finish({ success: false, error: `无法监听分析窗口状态: ${error.message}` });
+            return task;
+        }
+    }
+    if (owner && typeof owner.isDestroyed === 'function' && owner.isDestroyed()) {
+        finish({ success: false, error: '分析窗口已关闭', cancelled: true });
+        return task;
+    }
+    if (settled) return task;
+
+    try {
+        proc = spawnProcess(options.tsharkPath, options.args || [], { windowsHide: true });
+    } catch (error) {
+        finish({ success: false, error: error.message });
+        return task;
+    }
+
+    proc.stdout?.on('data', (data) => {
+        if (settled) return;
+        buffer += data.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) parseLine(line);
+        if (batch.length >= 200) flushBatch();
+    });
+    proc.stdout?.once('error', (error) => {
+        finish({ success: false, error: `Tshark 输出流错误: ${error.message}` }, true);
+    });
+
+    proc.stderr?.on('data', (data) => {
+        if (settled) return;
+        stderrTail = (stderrTail + data.toString()).slice(-MAX_IMPORT_STDERR_LENGTH);
+    });
+    proc.stderr?.once('error', (error) => {
+        finish({ success: false, error: `Tshark 错误流异常: ${error.message}` }, true);
+    });
+
+    proc.once('error', (error) => {
+        finish({ success: false, error: error.message }, true);
+    });
+
+    proc.once('close', (code, signal) => {
+        if (settled) return;
+        if (buffer.trim()) parseLine(buffer);
+        if (!flushBatch()) return;
+        if (code === 0 && !signal) {
+            finish({
+                success: true,
+                fileName: path.basename(filePath),
+                packetCount: totalPkts
+            });
+            return;
+        }
+        const detail = stderrTail.trim();
+        const suffix = detail ? `: ${detail}` : '';
+        finish({
+            success: false,
+            error: `Tshark 解析异常退出（退出码 ${code ?? '未知'}${signal ? `，信号 ${signal}` : ''}）${suffix}`
+        });
+    });
+
+    try {
+        timer = setTimeoutFn(() => {
+            finish({
+                success: false,
+                error: 'Tshark 文件解析超时，进程已终止',
+                timedOut: true
+            }, true);
+        }, timeoutMs);
+        timer?.unref?.();
+    } catch (error) {
+        finish({ success: false, error: `无法启动导入超时计时器: ${error.message}` }, true);
+    }
+
+    return task;
+}
+
+function createTsharkImportController(options = {}) {
+    let activeTask = null;
+
+    return {
+        start(params) {
+            if (activeTask && !activeTask.isSettled()) {
+                return Promise.resolve({ success: false, error: '已有 Tshark 文件导入任务正在运行' });
+            }
+            const task = createTsharkImportTask({
+                ...params,
+                spawnProcess: options.spawnProcess,
+                killProcess: options.killProcess,
+                setTimeoutFn: options.setTimeoutFn,
+                clearTimeoutFn: options.clearTimeoutFn,
+                timeoutMs: options.timeoutMs
+            });
+            activeTask = task;
+            return task.promise.finally(() => {
+                if (activeTask === task) activeTask = null;
+            });
+        },
+        stop(reason) {
+            if (!activeTask || activeTask.isSettled()) return false;
+            return activeTask.stop(reason);
+        },
+        isRunning() {
+            return Boolean(activeTask && !activeTask.isSettled());
+        }
+    };
+}
+
+function createProcessSpawnWaiter(proc) {
+    let finishWait;
+    const promise = new Promise((resolve) => {
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return false;
+            settled = true;
+            proc.removeListener('spawn', onSpawn);
+            proc.removeListener('error', onError);
+            proc.removeListener('close', onClose);
+            resolve(result);
+            return true;
+        };
+        finishWait = finish;
+        const onSpawn = () => finish({ success: true });
+        const onError = (error) => finish({ success: false, error: error.message });
+        const onClose = (code, signal) => finish({
+            success: false,
+            error: `Tshark 启动前已退出（退出码 ${code ?? '未知'}${signal ? `，信号 ${signal}` : ''}）`
+        });
+
+        proc.once('spawn', onSpawn);
+        proc.once('error', onError);
+        proc.once('close', onClose);
+    });
+    return {
+        promise,
+        cancel(reason) {
+            if (finishWait({ success: false, cancelled: true, error: reason || 'Tshark 启动已取消' })) {
+                try { proc.once('error', () => {}); } catch (_) {}
+            }
+        }
+    };
 }
 
 // ==================== 私有函数 ====================
@@ -943,16 +1191,113 @@ ${diagnosis.summary || '无评估内容'}
 /**
  * 注册 Tshark 分析器相关 IPC 处理程序
  */
-function registerTsharkAnalyzerHandlers(context) {
+function registerTsharkAnalyzerHandlers(context, dependencies = {}) {
     const { getMainWindow } = context;
+    const ipc = dependencies.ipcMain || ipcMain;
+    const dialogApi = dependencies.dialog || dialog;
+    const appApi = dependencies.app || app;
+    const createToolWindow = dependencies.createToolWindow || defaultCreateToolWindow;
+    const spawnProcess = dependencies.spawn || spawn;
+    const killProcess = dependencies.killProcess || _killProcess;
+    const resolveTsharkPath = dependencies.findTshark || findTshark;
+    const importController = createTsharkImportController({
+        spawnProcess,
+        killProcess,
+        setTimeoutFn: dependencies.setTimeout,
+        clearTimeoutFn: dependencies.clearTimeout,
+        timeoutMs: dependencies.importTimeoutMs
+    });
+    let activeImportRequest = null;
+    let captureStartRequest = null;
+    let captureJob = null;
 
-    ipcMain.handle('tshark:open', async () => {
+    const ensureTsharkPath = async () => {
+        if (typeof dependencies.findTshark === 'function' || !cachedTsharkPath) {
+            cachedTsharkPath = await resolveTsharkPath();
+        }
+        return cachedTsharkPath;
+    };
+
+    const sendToOwner = (owner, channel, payload) => {
+        if (!owner || (typeof owner.isDestroyed === 'function' && owner.isDestroyed())) return false;
+        try {
+            owner.send(channel, payload);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    };
+
+    const finishCapture = (job, options = {}) => {
+        if (!job || job.settled) return false;
+        job.settled = true;
+        if (captureJob === job) captureJob = null;
+        if (job.flushInterval !== null) {
+            clearInterval(job.flushInterval);
+            job.flushInterval = null;
+        }
+        try { job.owner?.removeListener?.('destroyed', job.onOwnerDestroyed); } catch (_) {}
+
+        if (options.flush && job.pendingBatch.length > 0) {
+            sendToOwner(job.owner, 'tshark:packets', job.pendingBatch);
+        }
+        job.pendingBatch = [];
+        job.buffer = '';
+
+        if (options.kill) {
+            try { killProcess(job.proc); } catch (_) {}
+        }
+        if (options.error) {
+            sendToOwner(job.owner, 'tshark:error', options.error);
+        }
+        if (options.notify !== false) {
+            sendToOwner(job.owner, 'tshark:stopped', {
+                code: options.code ?? 0,
+                stopped: Boolean(options.stopped)
+            });
+        }
+        return true;
+    };
+
+    const cancelCapture = (reason, notify = true) => {
+        let cancelled = false;
+        if (captureStartRequest) {
+            captureStartRequest.cancelled = true;
+            captureStartRequest.reason = reason;
+            captureStartRequest.spawnWaiter?.cancel(reason);
+            if (captureStartRequest.proc && !captureStartRequest.procKilled) {
+                captureStartRequest.procKilled = true;
+                try { killProcess(captureStartRequest.proc); } catch (_) {}
+            }
+            cancelled = true;
+        }
+        if (captureJob) {
+            cancelled = finishCapture(captureJob, {
+                code: 0,
+                stopped: true,
+                kill: true,
+                flush: false,
+                notify
+            }) || cancelled;
+        }
+        return cancelled;
+    };
+
+    const cancelImport = (reason) => {
+        if (activeImportRequest) {
+            activeImportRequest.cancelled = true;
+            activeImportRequest.reason = reason;
+        }
+        return importController.stop(reason);
+    };
+
+    ipc.handle('tshark:open', async () => {
         if (analyzerWindow && !analyzerWindow.isDestroyed()) {
             analyzerWindow.focus();
             return { success: true };
         }
 
-        const basePath = app.isPackaged
+        const basePath = appApi.isPackaged
             ? path.join(process.resourcesPath, 'app.asar.unpacked')
             : path.join(__dirname, '..', '..');
         const indexPath = path.join(basePath, 'TsharkAnalyzer', 'index.html');
@@ -973,17 +1318,14 @@ function registerTsharkAnalyzerHandlers(context) {
 
         analyzerWindow.on('closed', () => {
             analyzerWindow = null;
-            if (captureProcess) {
-                const proc = captureProcess;
-                captureProcess = null;
-                _killProcess(proc);
-            }
+            cancelImport('分析窗口已关闭');
+            cancelCapture('分析窗口已关闭', false);
         });
 
         return { success: true };
     });
 
-    ipcMain.handle('tshark:checkVersion', async (event, customPath) => {
+    ipc.handle('tshark:checkVersion', async (event, customPath) => {
         let targetPath;
         if (typeof customPath === 'string' && customPath.trim()) {
             try {
@@ -994,7 +1336,7 @@ function registerTsharkAnalyzerHandlers(context) {
         } else if (customPath !== undefined && customPath !== null) {
             return { found: false, version: null, path: null, error: 'TShark 路径无效' };
         } else {
-            targetPath = cachedTsharkPath || await findTshark();
+            targetPath = await ensureTsharkPath();
         }
         if (!targetPath) return { found: false, version: null, path: null, error: '未找到 tshark，请安装 Wireshark' };
         const result = await checkTsharkVersion(targetPath);
@@ -1002,9 +1344,9 @@ function registerTsharkAnalyzerHandlers(context) {
         return result;
     });
 
-    ipcMain.handle('tshark:browseTshark', async () => {
+    ipc.handle('tshark:browseTshark', async () => {
         const win = analyzerWindow || null;
-        const result = await dialog.showOpenDialog(win, {
+        const result = await dialogApi.showOpenDialog(win, {
             title: '选择 tshark 可执行文件',
             defaultPath: 'C:\\Program Files\\Wireshark',
             filters: [
@@ -1017,155 +1359,248 @@ function registerTsharkAnalyzerHandlers(context) {
         return { canceled: false, path: result.filePaths[0] };
     });
 
-    ipcMain.handle('tshark:getInterfaces', async () => {
-        if (!cachedTsharkPath) cachedTsharkPath = await findTshark();
+    ipc.handle('tshark:getInterfaces', async () => {
+        await ensureTsharkPath();
         if (!cachedTsharkPath) return { success: false, error: '未找到 tshark，请安装 Wireshark 并将其加入系统 PATH' };
         const interfaces = await getTsharkInterfaces(cachedTsharkPath);
         return { success: true, interfaces };
     });
 
-    ipcMain.handle('tshark:start', async (event, options) => {
-        if (!cachedTsharkPath) cachedTsharkPath = await findTshark();
-        if (!cachedTsharkPath) return { success: false, error: '未找到 tshark，请先安装 Wireshark' };
+    ipc.handle('tshark:start', async (event, options) => {
+        if (activeImportRequest || importController.isRunning()) {
+            return { success: false, error: '正在导入抓包文件，请先停止导入任务' };
+        }
+        if (captureStartRequest || captureJob) {
+            return { success: false, error: '已有抓包任务正在运行' };
+        }
+        const owner = event?.sender || analyzerWindow?.webContents || null;
+        if (!owner || (typeof owner.isDestroyed === 'function' && owner.isDestroyed())) {
+            return { success: false, error: '分析窗口已关闭', cancelled: true };
+        }
 
-        if (captureProcess) { const old = captureProcess; captureProcess = null; _killProcess(old); }
-        packetCounter = 0;
-
-        const { interfaceIndex, captureFilter, displayFilter } = options;
-        // 生成临时 pcap 路径，与 JSON 解析并行写入
-        tmpPcapPath = path.join(app.getPath('temp'), `tshark-cap-${Date.now()}.pcap`);
-        const args = [
-            '-i', String(interfaceIndex || 1),
-            '-T', 'ek', '-l', '-n',
-            '-w', tmpPcapPath,
-            ...TSHARK_FIELDS
-        ];
-        if (captureFilter) args.push('-f', captureFilter);
-        if (displayFilter) args.push('-Y', displayFilter);
-
+        const request = {
+            cancelled: false,
+            reason: null,
+            owner,
+            proc: null,
+            procKilled: false,
+            spawnWaiter: null,
+            onOwnerDestroyed: null
+        };
+        request.onOwnerDestroyed = () => {
+            request.cancelled = true;
+            request.reason = '分析窗口已关闭';
+            request.spawnWaiter?.cancel(request.reason);
+            if (request.proc && !request.procKilled) {
+                request.procKilled = true;
+                try { killProcess(request.proc); } catch (_) {}
+            }
+        };
+        captureStartRequest = request;
+        try { owner.once?.('destroyed', request.onOwnerDestroyed); } catch (_) {}
         try {
-            captureProcess = spawn(cachedTsharkPath, args, { windowsHide: true });
-            let buffer = '';
-            let pendingBatch = [];
+            await ensureTsharkPath();
+            if (request.cancelled || (typeof owner.isDestroyed === 'function' && owner.isDestroyed())) {
+                return { success: false, error: request.reason || '抓包启动已取消', cancelled: true };
+            }
+            if (!cachedTsharkPath) return { success: false, error: '未找到 tshark，请先安装 Wireshark' };
 
-            // 攻包定时推送（每 100ms 一批），避免高流量时淡没渲染进程 IPC
-            const flushInterval = setInterval(() => {
-                if (pendingBatch.length > 0 && analyzerWindow && !analyzerWindow.isDestroyed()) {
-                    analyzerWindow.webContents.send('tshark:packets', pendingBatch);
-                    pendingBatch = [];
+            packetCounter = 0;
+
+            const { interfaceIndex, captureFilter, displayFilter } = options || {};
+            // 生成临时 pcap 路径，与 JSON 解析并行写入
+            tmpPcapPath = path.join(appApi.getPath('temp'), `tshark-cap-${Date.now()}.pcap`);
+            const args = [
+                '-i', String(interfaceIndex || 1),
+                '-T', 'ek', '-l', '-n',
+                '-w', tmpPcapPath,
+                ...TSHARK_FIELDS
+            ];
+            if (captureFilter) args.push('-f', captureFilter);
+            if (displayFilter) args.push('-Y', displayFilter);
+
+            let proc = null;
+            let job = null;
+            try {
+                proc = spawnProcess(cachedTsharkPath, args, { windowsHide: true });
+                request.proc = proc;
+                request.spawnWaiter = createProcessSpawnWaiter(proc);
+                const spawnResult = await request.spawnWaiter.promise;
+                request.spawnWaiter = null;
+                if (request.cancelled || spawnResult.cancelled) {
+                    request.proc = null;
+                    return { success: false, error: request.reason || spawnResult.error || '抓包启动已取消', cancelled: true };
                 }
-            }, 100);
+                if (!spawnResult.success) {
+                    request.proc = null;
+                    return { success: false, error: `无法启动 Tshark: ${spawnResult.error}` };
+                }
+                if (request.cancelled) {
+                    if (!request.procKilled) {
+                        request.procKilled = true;
+                        killProcess(proc);
+                    }
+                    request.proc = null;
+                    return { success: false, error: request.reason || '抓包启动已取消', cancelled: true };
+                }
 
-            captureProcess.stdout.on('data', (data) => {
-                buffer += data.toString();
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-                for (const line of lines) {
-                    const t = line.trim();
-                    if (!t || t.startsWith('{"index"')) continue;
-                    const pkt = _parseEkPacket(t);
-                    if (pkt) pendingBatch.push(pkt);
+                try { owner.removeListener?.('destroyed', request.onOwnerDestroyed); } catch (_) {}
+                job = {
+                    proc,
+                    owner,
+                    settled: false,
+                    buffer: '',
+                    pendingBatch: [],
+                    flushInterval: null,
+                    onOwnerDestroyed: null
+                };
+                job.onOwnerDestroyed = () => {
+                    finishCapture(job, { kill: true, flush: false, notify: false });
+                };
+                captureJob = job;
+                request.proc = null;
+                try { owner.once?.('destroyed', job.onOwnerDestroyed); } catch (_) {}
+                if (job.settled || (typeof owner.isDestroyed === 'function' && owner.isDestroyed())) {
+                    finishCapture(job, { kill: true, flush: false, notify: false });
+                    return { success: false, error: '分析窗口已关闭', cancelled: true };
+                }
+
+                // 攻包定时推送（每 100ms 一批），避免高流量时淡没渲染进程 IPC
+                job.flushInterval = setInterval(() => {
+                    if (job.settled || captureJob !== job || job.pendingBatch.length === 0) return;
+                    if (sendToOwner(job.owner, 'tshark:packets', job.pendingBatch)) {
+                        job.pendingBatch = [];
+                    }
+                }, 100);
+
+                proc.stdout.on('data', (data) => {
+                    if (job.settled || captureJob !== job) return;
+                    job.buffer += data.toString();
+                    const lines = job.buffer.split('\n');
+                    job.buffer = lines.pop();
+                    for (const line of lines) {
+                        const t = line.trim();
+                        if (!t || t.startsWith('{"index"')) continue;
+                        const pkt = _parseEkPacket(t);
+                        if (pkt) job.pendingBatch.push(pkt);
+                    }
+                });
+                proc.stdout.once('error', (error) => {
+                    finishCapture(job, {
+                        code: -1,
+                        error: `抓包输出流错误: ${error.message}`,
+                        kill: true,
+                        flush: false
+                    });
+                });
+
+                proc.stderr.on('data', (data) => {
+                    if (job.settled || captureJob !== job) return;
+                    sendToOwner(job.owner, 'tshark:error', data.toString());
+                });
+                proc.stderr.once('error', (error) => {
+                    finishCapture(job, {
+                        code: -1,
+                        error: `抓包错误流异常: ${error.message}`,
+                        kill: true,
+                        flush: false
+                    });
+                });
+
+                proc.on('close', (code) => {
+                    finishCapture(job, { code, flush: true });
+                });
+
+                proc.on('error', (err) => {
+                    finishCapture(job, {
+                        code: -1,
+                        error: `启动失败: ${err.message}`,
+                        kill: true,
+                        flush: false
+                    });
+                });
+
+                return { success: true };
+            } catch (error) {
+                if (job) {
+                    finishCapture(job, { kill: true, flush: false, notify: false });
+                } else if (proc) {
+                    try { killProcess(proc); } catch (_) {}
+                }
+                return { success: false, error: error.message };
+            }
+        } finally {
+            try { owner.removeListener?.('destroyed', request.onOwnerDestroyed); } catch (_) {}
+            if (captureStartRequest === request) captureStartRequest = null;
+        }
+    });
+
+    ipc.handle('tshark:stop', async () => {
+        const stoppedCapture = cancelCapture('抓包已停止');
+        const stoppedImport = cancelImport('导入已停止');
+        return { success: true, stoppedCapture, stoppedImport };
+    });
+
+    ipc.handle('tshark:importFile', async (event) => {
+        if (captureStartRequest || captureJob) {
+            return { success: false, error: '正在抓包，请先停止抓包任务' };
+        }
+        if (activeImportRequest || importController.isRunning()) {
+            return { success: false, error: '已有 Tshark 文件导入任务正在运行' };
+        }
+
+        const request = { cancelled: false, reason: null };
+        activeImportRequest = request;
+        try {
+            const win = analyzerWindow || (getMainWindow ? getMainWindow() : null);
+            const result = await dialogApi.showOpenDialog(win, {
+                title: '导入抓包文件',
+                filters: [{ name: 'PCAP 文件', extensions: ['pcap', 'pcapng', 'cap'] }],
+                properties: ['openFile']
+            });
+            if (request.cancelled) {
+                return { success: false, error: request.reason || '导入已停止', cancelled: true };
+            }
+            if (result.canceled || !result.filePaths.length) {
+                return { success: false, error: '取消', cancelled: true };
+            }
+
+            await ensureTsharkPath();
+            if (request.cancelled) {
+                return { success: false, error: request.reason || '导入已停止', cancelled: true };
+            }
+            if (!cachedTsharkPath) return { success: false, error: '未找到 tshark' };
+
+            const owner = event?.sender || analyzerWindow?.webContents || null;
+            if (!owner || (typeof owner.isDestroyed === 'function' && owner.isDestroyed())) {
+                return { success: false, error: '分析窗口已关闭', cancelled: true };
+            }
+
+            packetCounter = 0;
+            const filePath = result.filePaths[0];
+            const args = ['-r', filePath, '-T', 'ek', '-n', ...TSHARK_FIELDS];
+            try { owner.send('tshark:importStart'); } catch (_) {
+                return { success: false, error: '无法通知分析窗口开始导入', cancelled: true };
+            }
+
+            return await importController.start({
+                tsharkPath: cachedTsharkPath,
+                filePath,
+                args,
+                owner,
+                onPackets: (packets) => {
+                    if (request.cancelled || (typeof owner.isDestroyed === 'function' && owner.isDestroyed())) return;
+                    owner.send('tshark:packets', packets);
                 }
             });
-
-            captureProcess.stderr.on('data', (data) => {
-                const msg = data.toString();
-                if (analyzerWindow && !analyzerWindow.isDestroyed()) {
-                    analyzerWindow.webContents.send('tshark:error', msg);
-                }
-            });
-
-            captureProcess.on('close', (code) => {
-                clearInterval(flushInterval);
-                captureProcess = null;
-                // 刷出剩余未推送的数据包
-                if (pendingBatch.length > 0 && analyzerWindow && !analyzerWindow.isDestroyed()) {
-                    analyzerWindow.webContents.send('tshark:packets', pendingBatch);
-                    pendingBatch = [];
-                }
-                if (analyzerWindow && !analyzerWindow.isDestroyed()) {
-                    analyzerWindow.webContents.send('tshark:stopped', { code });
-                }
-            });
-
-            captureProcess.on('error', (err) => {
-                captureProcess = null;
-                if (analyzerWindow && !analyzerWindow.isDestroyed()) {
-                    analyzerWindow.webContents.send('tshark:error', `启动失败: ${err.message}`);
-                    analyzerWindow.webContents.send('tshark:stopped', { code: -1 });
-                }
-            });
-
-            return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
+        } finally {
+            if (activeImportRequest === request) activeImportRequest = null;
         }
     });
 
-    ipcMain.handle('tshark:stop', async () => {
-        if (captureProcess) {
-            const proc = captureProcess;
-            captureProcess = null;
-            _killProcess(proc);
-        }
-        return { success: true };
-    });
-
-    ipcMain.handle('tshark:importFile', async () => {
-        const win = analyzerWindow || (getMainWindow ? getMainWindow() : null);
-        const result = await dialog.showOpenDialog(win, {
-            title: '导入抓包文件',
-            filters: [{ name: 'PCAP 文件', extensions: ['pcap', 'pcapng', 'cap'] }],
-            properties: ['openFile']
-        });
-        if (result.canceled || !result.filePaths.length) return { success: false, error: '取消' };
-
-        if (!cachedTsharkPath) cachedTsharkPath = await findTshark();
-        if (!cachedTsharkPath) return { success: false, error: '未找到 tshark' };
-
-        packetCounter = 0;
-        const filePath = result.filePaths[0];
-        const args = ['-r', filePath, '-T', 'ek', '-n', ...TSHARK_FIELDS];
-
-        // 通知渲染进程清空并准备接收流式数据
-        if (analyzerWindow && !analyzerWindow.isDestroyed()) {
-            analyzerWindow.webContents.send('tshark:importStart');
-        }
-
-        return new Promise((resolve) => {
-            const proc = spawn(cachedTsharkPath, args, { windowsHide: true });
-            let buf = '';
-            let batch = [];
-            let totalPkts = 0;
-
-            proc.stdout.on('data', (d) => {
-                buf += d.toString();
-                const lines = buf.split('\n');
-                buf = lines.pop();
-                for (const line of lines) {
-                    const t = line.trim();
-                    if (!t || t.startsWith('{"index"')) continue;
-                    const pkt = _parseEkPacket(t);
-                    if (pkt) { batch.push(pkt); totalPkts++; }
-                }
-                // 每 200 个包推送一次，避免一次性传输导致内存暴涨
-                if (batch.length >= 200 && analyzerWindow && !analyzerWindow.isDestroyed()) {
-                    analyzerWindow.webContents.send('tshark:packets', batch);
-                    batch = [];
-                }
-            });
-
-            proc.on('close', () => {
-                if (batch.length > 0 && analyzerWindow && !analyzerWindow.isDestroyed()) {
-                    analyzerWindow.webContents.send('tshark:packets', batch);
-                }
-                resolve({ success: true, fileName: path.basename(filePath), packetCount: totalPkts });
-            });
-            proc.on('error', (err) => resolve({ success: false, error: err.message }));
-        });
-    });
-
-    ipcMain.handle('tshark:aiDiagnose', async (event, { stats, packetCount, config }) => {
+    ipc.handle('tshark:aiDiagnose', async (event, { stats, packetCount, config }) => {
         try {
             const prompt = _buildDiagnosticPrompt(stats, packetCount);
             const result = await _callAiApi(config, prompt);
@@ -1175,9 +1610,9 @@ function registerTsharkAnalyzerHandlers(context) {
         }
     });
 
-    ipcMain.handle('tshark:exportMarkdown', async (event, { diagnosis, stats, packetCount }) => {
+    ipc.handle('tshark:exportMarkdown', async (event, { diagnosis, stats, packetCount }) => {
         const win = analyzerWindow || (getMainWindow ? getMainWindow() : null);
-        const result = await dialog.showSaveDialog(win, {
+        const result = await dialogApi.showSaveDialog(win, {
             title: '导出诊断报告',
             defaultPath: `network-diagnosis-${new Date().toISOString().slice(0, 10)}.md`,
             filters: [{ name: 'Markdown 文件', extensions: ['md'] }]
@@ -1192,9 +1627,9 @@ function registerTsharkAnalyzerHandlers(context) {
         }
     });
 
-    ipcMain.handle('tshark:exportPdf', async (event, { htmlContent }) => {
+    ipc.handle('tshark:exportPdf', async (event, { htmlContent }) => {
         const win = analyzerWindow || (getMainWindow ? getMainWindow() : null);
-        const result = await dialog.showSaveDialog(win, {
+        const result = await dialogApi.showSaveDialog(win, {
             title: '导出 PDF 报告',
             defaultPath: `network-diagnosis-${new Date().toISOString().slice(0, 10)}.pdf`,
             filters: [{ name: 'PDF 文件', extensions: ['pdf'] }]
@@ -1213,9 +1648,9 @@ function registerTsharkAnalyzerHandlers(context) {
         }
     });
 
-    ipcMain.handle('tshark:saveConfig', async (event, config) => {
+    ipc.handle('tshark:saveConfig', async (event, config) => {
         try {
-            const configPath = path.join(app.getPath('userData'), 'tshark-analyzer-config.json');
+            const configPath = path.join(appApi.getPath('userData'), 'tshark-analyzer-config.json');
             const toSave = { ...config };
             // 使用 safeStorage 加密 API Key
             if (toSave.apiKey && safeStorage.isEncryptionAvailable()) {
@@ -1231,9 +1666,9 @@ function registerTsharkAnalyzerHandlers(context) {
 
     // ==================== 数据包导出 ====================
 
-    ipcMain.handle('tshark:exportCsv', async (event, { packets }) => {
+    ipc.handle('tshark:exportCsv', async (event, { packets }) => {
         const win = analyzerWindow || (getMainWindow ? getMainWindow() : null);
-        const result = await dialog.showSaveDialog(win, {
+        const result = await dialogApi.showSaveDialog(win, {
             title: '导出数据包 CSV',
             defaultPath: `packets-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`,
             filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
@@ -1251,9 +1686,9 @@ function registerTsharkAnalyzerHandlers(context) {
         } catch (e) { return { success: false, error: e.message }; }
     });
 
-    ipcMain.handle('tshark:exportJson', async (event, { packets }) => {
+    ipc.handle('tshark:exportJson', async (event, { packets }) => {
         const win = analyzerWindow || (getMainWindow ? getMainWindow() : null);
-        const result = await dialog.showSaveDialog(win, {
+        const result = await dialogApi.showSaveDialog(win, {
             title: '导出数据包 JSON',
             defaultPath: `packets-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`,
             filters: [{ name: 'JSON 文件', extensions: ['json'] }]
@@ -1265,12 +1700,12 @@ function registerTsharkAnalyzerHandlers(context) {
         } catch (e) { return { success: false, error: e.message }; }
     });
 
-    ipcMain.handle('tshark:exportPcap', async () => {
+    ipc.handle('tshark:exportPcap', async () => {
         const win = analyzerWindow || (getMainWindow ? getMainWindow() : null);
         if (!tmpPcapPath || !fs.existsSync(tmpPcapPath)) {
             return { success: false, error: '无可用的 PCAP 数据，请先进行实时抓包后再导出' };
         }
-        const result = await dialog.showSaveDialog(win, {
+        const result = await dialogApi.showSaveDialog(win, {
             title: '导出为 PCAP 文件',
             defaultPath: `capture-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.pcap`,
             filters: [{ name: 'PCAP 文件', extensions: ['pcap', 'pcapng'] }]
@@ -1282,9 +1717,9 @@ function registerTsharkAnalyzerHandlers(context) {
         } catch (e) { return { success: false, error: e.message }; }
     });
 
-    ipcMain.handle('tshark:loadConfig', async () => {
+    ipc.handle('tshark:loadConfig', async () => {
         try {
-            const configPath = path.join(app.getPath('userData'), 'tshark-analyzer-config.json');
+            const configPath = path.join(appApi.getPath('userData'), 'tshark-analyzer-config.json');
             if (fs.existsSync(configPath)) {
                 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
                 // 解密 API Key（兼容旧版明文存储）
@@ -1303,4 +1738,10 @@ function registerTsharkAnalyzerHandlers(context) {
     });
 }
 
-module.exports = { registerTsharkAnalyzerHandlers };
+module.exports = {
+    TSHARK_IMPORT_TIMEOUT_MS,
+    killTsharkProcess: _killProcess,
+    createTsharkImportTask,
+    createTsharkImportController,
+    registerTsharkAnalyzerHandlers
+};
