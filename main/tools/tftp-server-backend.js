@@ -19,6 +19,9 @@ class TftpServerBackend extends EventEmitter {
         this.timeout = (options.timeout || 3) * 1000; // 毫秒
         this.retries = options.retries || 5;
         this.maxBlockSize = options.maxBlockSize || 1468; // 适配 MTU
+        this.createSocket = options.createSocket || ((type) => dgram.createSocket(type));
+        this.setTimeoutFn = options.setTimeoutFn || setTimeout;
+        this.clearTimeoutFn = options.clearTimeoutFn || clearTimeout;
 
         this.serverSocket = null;
         this.sessions = new Map(); // key -> session object
@@ -30,7 +33,7 @@ class TftpServerBackend extends EventEmitter {
     start() {
         return new Promise((resolve, reject) => {
             try {
-                this.serverSocket = dgram.createSocket('udp4');
+                this.serverSocket = this.createSocket('udp4');
 
                 this.serverSocket.on('error', (err) => {
                     this.log(`主套接字错误: ${err.message}`, 'error');
@@ -59,7 +62,7 @@ class TftpServerBackend extends EventEmitter {
         return new Promise((resolve) => {
             // 清理所有活跃会话
             for (const [key, session] of this.sessions.entries()) {
-                this.cleanupSession(key, '服务器停止，传输中止');
+                this.cleanupSession(key, '服务器停止，传输中止', session);
             }
             this.sessions.clear();
 
@@ -236,12 +239,13 @@ class TftpServerBackend extends EventEmitter {
 
         // 创建新会话
         const sessionKey = `${rinfo.address}:${rinfo.port}`;
-        if (this.sessions.has(sessionKey)) {
+        const previousSession = this.sessions.get(sessionKey);
+        if (previousSession) {
             // 如果旧传输还存在，先清理
-            this.cleanupSession(sessionKey, '新会话请求到来，强行覆盖');
+            this.cleanupSession(sessionKey, '新会话请求到来，强行覆盖', previousSession);
         }
 
-        const sessionSocket = dgram.createSocket('udp4');
+        const sessionSocket = this.createSocket('udp4');
         const session = {
             id: sessionKey,
             type: typeStr,
@@ -261,6 +265,7 @@ class TftpServerBackend extends EventEmitter {
             retransmitCount: 0,
             timer: null,
             status: 'transferring',
+            cleanupStarted: false,
             optionsNegotiated: {}
         };
 
@@ -323,6 +328,7 @@ class TftpServerBackend extends EventEmitter {
 
         // 设置会话 socket 接收回调
         sessionSocket.on('message', (msg, remoteInfo) => {
+            if (!this.isActiveSession(session)) return;
             // 校验客户端端口和地址是否正确
             if (remoteInfo.address !== rinfo.address || remoteInfo.port !== rinfo.port) {
                 // 发送 ERROR 5
@@ -338,6 +344,10 @@ class TftpServerBackend extends EventEmitter {
 
         // 绑定到随机空闲端口
         sessionSocket.bind(0, this.host, () => {
+            if (!this.isActiveSession(session)) {
+                try { sessionSocket.close(); } catch (_) {}
+                return;
+            }
             this.log(`[会话创建] ${clientStr} -> 临时端口 ${sessionSocket.address().port}`, 'info');
 
             if (oackNeeded) {
@@ -350,8 +360,7 @@ class TftpServerBackend extends EventEmitter {
                     this.sendNextDataBlock(session);
                 } else {
                     // WRQ: 发送 ACK 0
-                    session.blockNum = 0;
-                    this.sendAck(session, 0);
+                    this.sendInitialWriteAck(session);
                 }
             }
             this.broadcastTransfers();
@@ -362,6 +371,7 @@ class TftpServerBackend extends EventEmitter {
      * 处理活跃传输会话发来的报文
      */
     handleSessionMessage(session, msg) {
+        if (!this.isActiveSession(session)) return;
         if (msg.length < 4) return;
         const opcode = msg.readUInt16BE(0);
 
@@ -376,9 +386,6 @@ class TftpServerBackend extends EventEmitter {
             return;
         }
 
-        // 重置重传计数
-        session.retransmitCount = 0;
-
         if (session.type === 'RRQ') {
             // 读请求：等待客户端 ACK
             if (opcode !== 4) {
@@ -390,6 +397,7 @@ class TftpServerBackend extends EventEmitter {
 
             // 如果是对当前块的 ACK (或选项协商时的 ACK 0)
             if (blockAck === session.blockNum) {
+                session.retransmitCount = 0;
                 this.clearTimeoutTimer(session);
 
                 // 计算进度
@@ -425,6 +433,7 @@ class TftpServerBackend extends EventEmitter {
             const nextExpectedBlock = (session.blockNum + 1) & 0xFFFF;
 
             if (blockNum === nextExpectedBlock) {
+                session.retransmitCount = 0;
                 this.clearTimeoutTimer(session);
 
                 const dataLength = msg.length - 4;
@@ -442,6 +451,7 @@ class TftpServerBackend extends EventEmitter {
 
                 // 回复 ACK
                 this.sendAck(session, blockNum, (err) => {
+                    if (!this.isActiveSession(session) || session.blockNum !== blockNum) return;
                     if (err) {
                         this.handleSessionError(session, `发送 ACK 失败: ${err.message}`);
                         return;
@@ -458,6 +468,7 @@ class TftpServerBackend extends EventEmitter {
 
             } else if (blockNum === session.blockNum) {
                 // 客户端没有收到我们的 ACK 重新发送了这一块，重发上一个 ACK
+                session.retransmitCount = 0;
                 this.clearTimeoutTimer(session);
                 if (session.lastPacket) {
                     session.socket.send(session.lastPacket, session.clientRinfo.port, session.clientRinfo.address);
@@ -473,6 +484,7 @@ class TftpServerBackend extends EventEmitter {
      * 发送下一个 DATA 数据块
      */
     sendNextDataBlock(session) {
+        if (!this.isActiveSession(session)) return;
         const buf = Buffer.alloc(session.blksize);
         let bytesRead = 0;
         try {
@@ -491,6 +503,7 @@ class TftpServerBackend extends EventEmitter {
         session.lastPacket = dataPacket;
 
         session.socket.send(dataPacket, session.clientRinfo.port, session.clientRinfo.address, (err) => {
+            if (!this.isActiveSession(session) || session.lastPacket !== dataPacket) return;
             if (err) {
                 this.handleSessionError(session, `发送数据块失败: ${err.message}`);
                 return;
@@ -513,9 +526,26 @@ class TftpServerBackend extends EventEmitter {
     }
 
     /**
+     * 发送 WRQ 初始 ACK0，并进入等待 DATA1 的重传周期
+     */
+    sendInitialWriteAck(session) {
+        if (!this.isActiveSession(session)) return;
+        session.blockNum = 0;
+        this.sendAck(session, 0, (err) => {
+            if (!this.isActiveSession(session) || session.blockNum !== 0) return;
+            if (err) {
+                this.handleSessionError(session, `发送 ACK 0 失败: ${err.message}`);
+                return;
+            }
+            this.startTimeoutTimer(session);
+        });
+    }
+
+    /**
      * 发送 OACK 选项协商响应
      */
     sendOack(session) {
+        if (!this.isActiveSession(session)) return;
         const buffers = [];
         buffers.push(Buffer.from([0, 6])); // Opcode 6 (OACK)
 
@@ -528,6 +558,7 @@ class TftpServerBackend extends EventEmitter {
         session.lastPacket = oackPacket;
 
         session.socket.send(oackPacket, session.clientRinfo.port, session.clientRinfo.address, (err) => {
+            if (!this.isActiveSession(session) || session.lastPacket !== oackPacket) return;
             if (err) {
                 this.handleSessionError(session, `发送 OACK 失败: ${err.message}`);
                 return;
@@ -540,10 +571,17 @@ class TftpServerBackend extends EventEmitter {
      * 开启超时重传计时器
      */
     startTimeoutTimer(session) {
+        if (!this.isActiveSession(session)) return false;
         this.clearTimeoutTimer(session);
-        session.timer = setTimeout(() => {
+        let timer = null;
+        timer = this.setTimeoutFn(() => {
+            if (session.timer !== timer) return;
+            session.timer = null;
             this.handleSessionTimeout(session);
         }, session.timeout);
+        session.timer = timer;
+        session.timer?.unref?.();
+        return true;
     }
 
     /**
@@ -551,7 +589,7 @@ class TftpServerBackend extends EventEmitter {
      */
     clearTimeoutTimer(session) {
         if (session.timer) {
-            clearTimeout(session.timer);
+            this.clearTimeoutFn(session.timer);
             session.timer = null;
         }
     }
@@ -560,6 +598,7 @@ class TftpServerBackend extends EventEmitter {
      * 超时重传处理
      */
     handleSessionTimeout(session) {
+        if (!this.isActiveSession(session)) return;
         session.retransmitCount++;
         if (session.retransmitCount > this.retries) {
             this.sendSocketError(session.socket, session.clientRinfo, 0, 'Transfer timed out');
@@ -569,7 +608,9 @@ class TftpServerBackend extends EventEmitter {
 
         this.log(`[超时重传] 向 ${session.clientStr} 重新发送第 ${session.blockNum} 块/协商包 (${session.retransmitCount}/${this.retries})`, 'warning');
         if (session.lastPacket) {
-            session.socket.send(session.lastPacket, session.clientRinfo.port, session.clientRinfo.address, (err) => {
+            const retransmitPacket = session.lastPacket;
+            session.socket.send(retransmitPacket, session.clientRinfo.port, session.clientRinfo.address, (err) => {
+                if (!this.isActiveSession(session) || session.lastPacket !== retransmitPacket) return;
                 if (err) {
                     this.handleSessionError(session, `重传数据失败: ${err.message}`);
                     return;
@@ -583,16 +624,18 @@ class TftpServerBackend extends EventEmitter {
      * 会话传输顺利完成
      */
     completeSession(session) {
+        if (!this.isActiveSession(session)) return;
         this.log(`[传输成功] ${session.type === 'RRQ' ? '下载' : '上传'} 完成: "${session.filename}" (共 ${session.bytesTransferred} 字节)`, 'success');
         
         session.status = 'completed';
-        this.cleanupSession(session.id);
+        this.cleanupSession(session.id, '', session);
     }
 
     /**
      * 会话遭遇错误终止
      */
     handleSessionError(session, errorMsg) {
+        if (!this.isActiveSession(session)) return;
         this.log(`[传输中断] ${session.type === 'RRQ' ? '下载' : '上传'} "${session.filename}" 失败: ${errorMsg}`, 'error');
         
         session.status = 'error';
@@ -610,15 +653,25 @@ class TftpServerBackend extends EventEmitter {
             } catch (_) {}
         }
 
-        this.cleanupSession(session.id);
+        this.cleanupSession(session.id, '', session);
+    }
+
+    isActiveSession(session) {
+        return Boolean(
+            session &&
+            !session.cleanupStarted &&
+            session.status === 'transferring' &&
+            this.sessions.get(session.id) === session
+        );
     }
 
     /**
      * 清理会话占用的资源 (fd, socket, timer)
      */
-    cleanupSession(key, logReason = '') {
+    cleanupSession(key, logReason = '', expectedSession = null) {
         const session = this.sessions.get(key);
-        if (!session) return;
+        if (!session || (expectedSession && session !== expectedSession) || session.cleanupStarted) return false;
+        session.cleanupStarted = true;
 
         this.clearTimeoutTimer(session);
 
@@ -647,13 +700,15 @@ class TftpServerBackend extends EventEmitter {
             this.broadcastTransfers();
             this.sessions.delete(key); // 可以直接删除，或者延迟删除。
             // 这里我们直接删除，前端在渲染列表时通过收到的同步更新维持列表，也可以设置延迟删除以供渲染
-            setTimeout(() => {
+            const refreshTimer = setTimeout(() => {
                 this.broadcastTransfers();
             }, 3000);
+            refreshTimer?.unref?.();
         } else {
             this.sessions.delete(key);
             this.broadcastTransfers();
         }
+        return true;
     }
 
     /**

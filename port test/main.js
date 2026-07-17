@@ -2,7 +2,10 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const net = require('net');
 const dgram = require('dgram');
-const { normalizeScanConcurrency } = require('../main/utils/scan-options');
+const {
+    normalizeScanConcurrency,
+    normalizeScanTimeout
+} = require('../main/utils/scan-options');
 
 let mainWindow;
 
@@ -37,7 +40,7 @@ function scanTcpPort(host, port, timeout = 2000) {
         const socket = new net.Socket();
         let status = 'closed';
 
-        socket.setTimeout(timeout);
+        socket.setTimeout(normalizeScanTimeout(timeout));
 
         socket.on('connect', () => {
             status = 'open';
@@ -70,6 +73,7 @@ function scanUdpPort(host, port, timeout = 3000) {
     return new Promise((resolve) => {
         const socket = dgram.createSocket('udp4');
         let responded = false;
+        const scanTimeout = normalizeScanTimeout(timeout);
 
         const timer = setTimeout(() => {
             if (!responded) {
@@ -77,7 +81,7 @@ function scanUdpPort(host, port, timeout = 3000) {
                 socket.close();
                 resolve({ port, status: 'open|filtered', protocol: 'UDP' });
             }
-        }, timeout);
+        }, scanTimeout);
 
         socket.on('error', (err) => {
             if (!responded) {
@@ -150,6 +154,7 @@ const COMMON_PORTS = {
 ipcMain.handle('scan-ports', async (event, { host, ports, protocol, timeout, concurrency }) => {
     const portList = parsePorts(ports);
     const batchSize = normalizeScanConcurrency(concurrency);
+    const scanTimeout = normalizeScanTimeout(timeout);
     const results = [];
     let completed = 0;
     const total = portList.length;
@@ -160,7 +165,7 @@ ipcMain.handle('scan-ports', async (event, { host, ports, protocol, timeout, con
     for (let i = 0; i < portList.length; i += batchSize) {
         const batch = portList.slice(i, i + batchSize);
         const batchResults = await Promise.all(
-            batch.map(port => scanPort(host, port, timeout))
+            batch.map(port => scanPort(host, port, scanTimeout))
         );
 
         for (const result of batchResults) {
@@ -187,8 +192,8 @@ ipcMain.handle('quick-test', async (event, { host, port, protocol, timeout }) =>
     }
 
     if (protocol === 'TCP') {
-        return await scanTcpPort(host, p, timeout);
+        return await scanTcpPort(host, p, normalizeScanTimeout(timeout));
     } else {
-        return await scanUdpPort(host, p, timeout);
+        return await scanUdpPort(host, p, normalizeScanTimeout(timeout));
     }
 });

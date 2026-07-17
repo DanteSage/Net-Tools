@@ -5,7 +5,10 @@ const path = require('path');
 const net = require('net');
 const { ipcMain } = require('electron');
 const { parsePortRange } = require('../utils/helpers');
-const { normalizeScanConcurrency } = require('../utils/scan-options');
+const {
+    normalizeScanConcurrency,
+    normalizeScanTimeout
+} = require('../utils/scan-options');
 const { createToolWindow } = require('../utils/toolWindow');
 
 let portScannerWindow = null;
@@ -14,12 +17,14 @@ let portScanCancelled = false;
 /**
  * TCP 端口扫描
  */
-function scanTcpPort(host, port, timeout = 2000) {
+function scanTcpPort(host, port, timeout = 2000, dependencies = {}) {
     return new Promise((resolve) => {
-        const socket = new net.Socket();
+        const socket = typeof dependencies.createSocket === 'function'
+            ? dependencies.createSocket()
+            : new net.Socket();
         let status = 'closed';
 
-        socket.setTimeout(timeout);
+        socket.setTimeout(normalizeScanTimeout(timeout));
 
         socket.on('connect', () => {
             status = 'open';
@@ -75,6 +80,7 @@ function registerPortScannerHandlers(context, dependencies = {}) {
         portScanCancelled = false;
         const portList = parsePortRange(ports);
         const batchSize = normalizeScanConcurrency(concurrency);
+        const scanTimeout = normalizeScanTimeout(timeout);
         const results = [];
         let completed = 0;
         const total = portList.length;
@@ -84,7 +90,7 @@ function registerPortScannerHandlers(context, dependencies = {}) {
             
             const batch = portList.slice(i, i + batchSize);
             const batchResults = await Promise.all(
-                batch.map(port => scanPort(host, port, timeout))
+                batch.map(port => scanPort(host, port, scanTimeout))
             );
 
             for (const result of batchResults) {
@@ -116,7 +122,7 @@ function registerPortScannerHandlers(context, dependencies = {}) {
         if (isNaN(p) || p < 1 || p > 65535) {
             return { error: '无效端口号' };
         }
-        return await scanPort(host, p, timeout);
+        return await scanPort(host, p, normalizeScanTimeout(timeout));
     });
 }
 
