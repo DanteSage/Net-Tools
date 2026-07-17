@@ -112,13 +112,22 @@ class FtpClient {
 
     // 针对传输指令（包含 150 启动、226 传输结束两阶段）的专属执行器
     sendTransferCmd(cmd) {
-        return this.sendCmd(cmd).then(res => {
-            if (res.code === 150 || res.code === 125) {
-                return new Promise((resolve, reject) => {
-                    this.cmdQueue.push({ resolve, reject });
-                });
+        return new Promise((resolve, reject) => {
+            const handleInitialResponse = (res) => {
+                if (res.code === 150 || res.code === 125) {
+                    // 必须同步注册最终响应。服务器可能在同一个 TCP 数据块中连续返回
+                    // 150/125 和 226；若通过 Promise.then() 延后注册，226 会被丢弃。
+                    this.cmdQueue.unshift({ resolve, reject });
+                    return;
+                }
+                resolve(res);
+            };
+
+            this.cmdQueue.push({ resolve: handleInitialResponse, reject });
+            if (this.onLog) {
+                this.onLog({ direction: 'sent', text: cmd });
             }
-            return res;
+            this.socket.write(cmd + '\r\n');
         });
     }
 
@@ -600,4 +609,4 @@ function registerFTPHandlers(context) {
     });
 }
 
-module.exports = { registerFTPHandlers };
+module.exports = { FtpClient, registerFTPHandlers };

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -474,7 +474,7 @@
                             </button>
                             <div class="terminal-encoding-wrapper" id="terminal-encoding-wrapper" style="display: none; align-items: center; gap: 6px; margin-left: 10px;">
                                 <label for="select-terminal-encoding" style="font-size: 12px; opacity: 0.8; white-space: nowrap;">编码:</label>
-                                <select id="select-terminal-encoding" class="select-input select-sm" style="width: 100px; padding: 2px 4px; height: 24px; font-size: 12px; border-radius: 4px; background: rgba(255,255,255,0.05); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); outline: none;">
+                                <select id="select-terminal-encoding" class="select-input select-sm" style="width: 100px; padding: 2px 4px; height: 24px; font-size: 12px; border-radius: 4px;">
                                     <option value="utf-8">UTF-8</option>
                                     <option value="gbk">GBK</option>
                                     <option value="gb2312">GB2312</option>
@@ -580,7 +580,7 @@
                                         <div class="editor-actions">
                                             <div class="editor-encoding-wrapper" id="editor-encoding-wrapper" style="display: inline-flex; align-items: center; gap: 4px; margin-right: 8px;">
                                                 <label for="select-editor-encoding" style="font-size: 12px; opacity: 0.8; white-space: nowrap;">编码:</label>
-                                                <select id="select-editor-encoding" class="select-input select-sm" style="width: 90px; padding: 2px 4px; height: 28px; font-size: 12px; border-radius: 4px; background: rgba(255,255,255,0.05); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); outline: none;">
+                                                <select id="select-editor-encoding" class="select-input select-sm" style="width: 90px; padding: 2px 4px; height: 28px; font-size: 12px; border-radius: 4px;">
                                                     <option value="utf-8">UTF-8</option>
                                                     <option value="gbk">GBK</option>
                                                     <option value="gb2312">GB2312</option>
@@ -1330,37 +1330,41 @@
                                         </span>
                                         <span class="btn-text">开始执行</span>
                                     </button>
-                                    <button class="btn-control btn-pause" id="btn-pause-batch" disabled>
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                                        </svg>
-                                        暂停
-                                    </button>
-                                    <button class="btn-control btn-stop" id="btn-stop-batch" disabled>
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                            <path d="M6 6h12v12H6z" />
-                                        </svg>
-                                        停止
-                                    </button>
+                                    <div class="control-actions">
+                                        <button class="btn-control btn-pause" id="btn-pause-batch" disabled>
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                            </svg>
+                                            暂停
+                                        </button>
+                                        <button class="btn-control btn-stop" id="btn-stop-batch" disabled>
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                                <path d="M6 6h12v12H6z" />
+                                            </svg>
+                                            停止
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="control-right">
-                                    <!-- 执行时间 -->
-                                    <div class="execution-timer" id="execution-timer">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                            <path
-                                                d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
-                                        </svg>
-                                        <span class="timer-value" id="timer-value">00:00</span>
+                                    <!-- 执行状态 -->
+                                    <div class="execution-status">
+                                        <div class="execution-timer" id="execution-timer">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                                <path
+                                                    d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
+                                            </svg>
+                                            <span class="timer-value" id="timer-value">00:00</span>
+                                        </div>
+                                        <!-- 进度环 -->
+                                        <div class="batch-progress-ring">
+                                            <svg class="batch-progress-svg" width="48" height="48">
+                                                <circle class="batch-progress-bg" cx="24" cy="24" r="20" />
+                                                <circle class="batch-progress-fill" id="progress-ring-fill" cx="24" cy="24" r="20" />
+                                            </svg>
+                                            <span class="batch-progress-text" id="progress-text">0%</span>
+                                        </div>
                                     </div>
-                                    <!-- 进度环 -->
-                                    <div class="progress-ring-container">
-                                        <svg class="progress-ring" width="56" height="56">
-                                            <circle class="progress-ring-bg" cx="28" cy="28" r="24" />
-                                            <circle class="progress-ring-fill" id="progress-ring-fill" cx="28" cy="28"
-                                                r="24" />
-                                        </svg>
-                                        <span class="progress-ring-text" id="progress-text">0%</span>
-                                    </div>
+                                    <div class="control-divider"></div>
                                     <!-- 统计数字 -->
                                     <div class="execution-stats">
                                         <div class="stat-item stat-total">
@@ -2559,13 +2563,13 @@
 
                         <!-- 扫描微动画区域 -->
                         <div class="recon-scan-container" id="recon-fg-scan-container" style="display: none;">
-                            <div class="progress-ring-container">
+                            <div class="batch-progress-ring">
                                 <svg class="progress-ring-circle" width="180" height="180">
-                                    <circle class="progress-ring-bg" stroke-width="6" fill="transparent" r="80" cx="90" cy="90"></circle>
-                                    <circle class="progress-ring-fill" id="recon-fg-progress-fill" stroke-width="6" fill="transparent" r="80" cx="90" cy="90" stroke-dasharray="502.65" stroke-dashoffset="502.65"></circle>
+                                    <circle class="batch-progress-bg" stroke-width="6" fill="transparent" r="80" cx="90" cy="90"></circle>
+                                    <circle class="batch-progress-fill" id="recon-fg-progress-fill" stroke-width="6" fill="transparent" r="80" cx="90" cy="90" stroke-dasharray="502.65" stroke-dashoffset="502.65"></circle>
                                 </svg>
                                 <div class="progress-ring-inner-glow"></div>
-                                <div class="progress-ring-text" id="recon-fg-progress-text">0%</div>
+                                <div class="batch-progress-text" id="recon-fg-progress-text">0%</div>
                               </div>
                             <div class="recon-scan-status">
                                 <div class="recon-scan-text" id="recon-fg-scan-text">等待探测中...</div>

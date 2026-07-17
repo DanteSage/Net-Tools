@@ -25,6 +25,32 @@ let editorActiveFilename = null;
 let editorActivePath = null;
 let editorOriginalContent = '';
 
+const REMOTE_EDITOR_READ_TIMEOUT_MS = 30000;
+
+/**
+ * 读取远程文本并限制等待时间，防止失活连接让编辑器永久停留在加载状态
+ */
+function readRemoteTextWithTimeout(apiType, connectionId, remotePath, encoding) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error('读取远程文件超时（30 秒），请检查连接状态后重试'));
+        }, REMOTE_EDITOR_READ_TIMEOUT_MS);
+
+        Promise.resolve().then(
+            () => window.api[apiType].readText(connectionId, remotePath, encoding)
+        ).then(
+            (result) => {
+                clearTimeout(timer);
+                resolve(result);
+            },
+            (error) => {
+                clearTimeout(timer);
+                reject(error);
+            }
+        );
+    });
+}
+
 /**
  * 初始化编辑器模块并绑定事件
  */
@@ -181,7 +207,7 @@ async function openRemoteFileEditor(session, filename, remotePath) {
         const connId = (session.connectionType === 'telnet' || session.useFtpFallback) ? session.ftpConnectionId : session.connectionId;
         const selectedEncoding = selectEditorEncoding ? selectEditorEncoding.value : (session.encoding || 'utf-8');
         
-        const result = await window.api[apiType].readText(connId, remotePath, selectedEncoding);
+        const result = await readRemoteTextWithTimeout(apiType, connId, remotePath, selectedEncoding);
         if (result.success) {
             editorTextarea.value = result.content;
             editorOriginalContent = result.content;
@@ -312,7 +338,7 @@ async function handleEditorEncodingChange() {
         const apiType = (editorActiveSession.connectionType === 'ftp' || editorActiveSession.connectionType === 'telnet' || editorActiveSession.useFtpFallback) ? 'ftp' : 'sftp';
         const connId = (editorActiveSession.connectionType === 'telnet' || editorActiveSession.useFtpFallback) ? editorActiveSession.ftpConnectionId : editorActiveSession.connectionId;
         
-        const result = await window.api[apiType].readText(connId, editorActivePath, selectedEncoding);
+        const result = await readRemoteTextWithTimeout(apiType, connId, editorActivePath, selectedEncoding);
         if (result.success) {
             editorTextarea.value = result.content;
             editorOriginalContent = result.content;
