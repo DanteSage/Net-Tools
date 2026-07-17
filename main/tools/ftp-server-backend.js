@@ -12,6 +12,32 @@ function destroyQuietly(stream) {
     try { stream.destroy(); } catch (_) {}
 }
 
+function controlConnectionMatchesIpv4(remoteAddress, requestedAddress) {
+    const address = String(remoteAddress || '').trim();
+    const family = net.isIP(address);
+    if (!family) return false;
+    try {
+        const allowedPeer = new net.BlockList();
+        allowedPeer.addAddress(requestedAddress, 'ipv4');
+        return allowedPeer.check(address, family === 6 ? 'ipv6' : 'ipv4');
+    } catch (_) {
+        return false;
+    }
+}
+
+function parsePortCommandArgument(arg) {
+    const fields = String(arg || '').split(',');
+    if (fields.length !== 6 || fields.some(field => !/^\d{1,3}$/.test(field))) return null;
+    const values = fields.map(Number);
+    if (values.some(value => !Number.isInteger(value) || value < 0 || value > 255)) return null;
+    const port = values[4] * 256 + values[5];
+    if (port < 1024 || port > 65535) return null;
+    return {
+        address: values.slice(0, 4).join('.'),
+        port
+    };
+}
+
 function pipeDataTransfer(source, destination) {
     return new Promise((resolve, reject) => {
         let settled = false;
@@ -83,6 +109,7 @@ class FtpServerBackend {
         this.rootDirectory = options.rootDirectory || os.homedir();
         this.timeout = (options.timeout || 300) * 1000; // 毫秒
         this.onLog = options.onLog || (() => {});
+        this.createPassiveServer = options.createPassiveServer || ((listener) => net.createServer(listener));
         this.server = null;
         this.connections = new Set();
     }
@@ -374,6 +401,8 @@ class FtpServerBackend {
      * 被动模式协商 (PASV)
      */
     handlePasv(socket, session) {
+        session.activeAddr = null;
+        session.activePort = null;
         if (session.passiveServer) {
             try { session.passiveServer.close(); } catch (e) {}
         }
@@ -383,7 +412,12 @@ class FtpServerBackend {
         session.dataSocketError = null;
 
         // 创建被动数据端口服务器监听连接
-        const passiveServer = net.createServer((dataSocket) => {
+        let passiveServer;
+        passiveServer = this.createPassiveServer((dataSocket) => {
+            if (session.passiveServer !== passiveServer) {
+                destroyQuietly(dataSocket);
+                return;
+            }
             session.dataSocket = dataSocket;
             dataSocket.on('error', (err) => {
                 this.log(`[数据通道错误] 被动连接异常: ${err.message}`);
@@ -402,6 +436,10 @@ class FtpServerBackend {
         session.passiveServer = passiveServer;
 
         passiveServer.on('error', (err) => {
+            if (session.passiveServer !== passiveServer) {
+                try { passiveServer.close(); } catch (_) {}
+                return;
+            }
             this.log(`[被动模式错误] 数据端口监听失败: ${err.message}`);
             if (session.passiveServer === passiveServer) {
                 session.passiveServer = null;
@@ -414,6 +452,7 @@ class FtpServerBackend {
 
         // 端口设为 0 以获取系统闲置随机端口
         passiveServer.listen(0, this.host, () => {
+            if (session.passiveServer !== passiveServer) return;
             const port = passiveServer.address().port;
             session.passivePort = port;
 
@@ -447,24 +486,35 @@ class FtpServerBackend {
      * 主动模式协商 (PORT)
      */
     handlePort(socket, session, arg) {
-        const parts = arg.split(',');
-        if (parts.length !== 6) {
-            socket.write('501 Syntax error in IP address/port.\r\n');
+        session.activeAddr = null;
+        session.activePort = null;
+
+        const endpoint = parsePortCommandArgument(arg);
+        if (!endpoint) {
+            socket.write('501 Illegal PORT command.\r\n');
             return;
         }
 
-        const ip = parts.slice(0, 4).join('.');
-        const port = parseInt(parts[4]) * 256 + parseInt(parts[5]);
+        if (!controlConnectionMatchesIpv4(socket.remoteAddress, endpoint.address)) {
+            socket.write('501 Illegal PORT command.\r\n');
+            this.log(`[安全] 拒绝异源 PORT ${endpoint.address}:${endpoint.port}，控制连接来源: ${socket.remoteAddress || 'unknown'}`);
+            return;
+        }
 
-        session.activeAddr = ip;
-        session.activePort = port;
+        if (session.passiveServer) {
+            try { session.passiveServer.close(); } catch (_) {}
+            session.passiveServer = null;
+        }
+
+        session.activeAddr = endpoint.address;
+        session.activePort = endpoint.port;
         destroyQuietly(session.dataSocket);
         session.dataSocket = null; // 清除已有的被动套接字
         session.dataSocketError = null;
         session.passivePort = null;
 
         socket.write('200 PORT command successful.\r\n');
-        this.log(`[主动模式] 记录客户端连接方向: ${ip}:${port}`);
+        this.log(`[主动模式] 记录客户端连接方向: ${endpoint.address}:${endpoint.port}`);
     }
 
     /**
