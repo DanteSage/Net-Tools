@@ -62,14 +62,18 @@ async function downloadDeviceTemplate() {
     
     const csvContent = BOM + templateLines.join('\r\n');
     
-    const filePath = await window.api.dialog?.saveFile?.({
-        defaultPath: `设备导入模板.csv`,
-        filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
-    });
-    
-    if (filePath) {
-        await window.api.fs?.writeFile?.(filePath, csvContent);
-        showToast('模板已下载，请按说明填写后导入', 'success');
+    try {
+        const result = await window.api.dialog?.writeTextFile?.({
+            defaultPath: `设备导入模板.csv`,
+            filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
+        }, csvContent);
+
+        if (result) {
+            showToast('模板已下载，请按说明填写后导入', 'success');
+        }
+    } catch (error) {
+        console.error('下载设备模板失败:', error);
+        showToast('下载模板失败: ' + error.message, 'error');
     }
 }
 
@@ -79,20 +83,16 @@ async function downloadDeviceTemplate() {
  * 导入设备
  */
 async function importDevices() {
-    const filePath = await window.api.dialog?.selectFile?.({
-        filters: [
-            { name: 'CSV 文件', extensions: ['csv'] },
-            { name: '所有支持的格式', extensions: ['csv', 'xlsx', 'xls'] }
-        ]
-    });
-    
-    if (!filePath) return;
-    
     try {
-        const content = await window.api.fs?.readFile?.(filePath);
+        const selectedFile = await window.api.dialog?.readTextFile?.({
+            filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
+        });
+        if (!selectedFile) return;
+
+        const { filePath, content } = selectedFile;
         let importedDevices = [];
         
-        if (filePath.endsWith('.csv')) {
+        if (filePath.toLowerCase().endsWith('.csv')) {
             importedDevices = parseCSVDevices(content);
         } else {
             showToast('请使用 CSV 格式的文件导入', 'warning');
@@ -397,13 +397,17 @@ async function exportDevices(devices) {
     
     const csvContent = BOM + csvLines.join('\r\n');
     
-    const filePath = await window.api.dialog?.saveFile?.({
-        defaultPath: `设备列表_${new Date().toISOString().slice(0, 10)}.csv`,
-        filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
-    });
-    
-    if (filePath) {
-        await window.api.fs?.writeFile?.(filePath, csvContent);
-        showToast(`已导出 ${devices.length} 台设备`, 'success');
+    try {
+        const result = await window.api.dialog?.writeTextFile?.({
+            defaultPath: `设备列表_${new Date().toISOString().slice(0, 10)}.csv`,
+            filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
+        }, csvContent);
+
+        if (result) {
+            showToast(`已导出 ${devices.length} 台设备`, 'success');
+        }
+    } catch (error) {
+        console.error('导出设备失败:', error);
+        showToast('导出失败: ' + error.message, 'error');
     }
 }

@@ -35,13 +35,12 @@ async function downloadTemplateImportTemplate() {
         
         const csvContent = BOM + templateLines.join('\r\n');
         
-        const filePath = await window.api.dialog.saveFile({
+        const result = await window.api.dialog.writeTextFile({
             defaultPath: '命令模板导入模板.csv',
             filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
-        });
+        }, csvContent);
         
-        if (filePath) {
-            await window.api.fs.writeFile(filePath, csvContent);
+        if (result) {
             showToast('模板已下载，请按说明填写后导入', 'success');
         }
     } catch (error) {
@@ -57,18 +56,18 @@ async function downloadTemplateImportTemplate() {
  */
 async function importTemplates() {
     try {
-        const filePath = await window.api.dialog.selectFile({
+        const selectedFile = await window.api.dialog.readTextFile({
             filters: [
                 { name: 'CSV 文件', extensions: ['csv'] },
                 { name: '所有支持的格式', extensions: ['csv'] }
             ]
         });
         
-        if (!filePath) return;
+        if (!selectedFile) return;
         
-        const content = await window.api.fs.readFile(filePath);
+        const { filePath, content } = selectedFile;
         
-        if (!filePath.endsWith('.csv')) {
+        if (!filePath.toLowerCase().endsWith('.csv')) {
             showToast('请使用 CSV 格式的文件导入', 'warning');
             return;
         }
@@ -278,14 +277,13 @@ async function exportTemplates() {
         
         const csvContent = BOM + csvLines.join('\r\n');
         
-        const filePath = await window.api.dialog?.saveFile?.({
+        const result = await window.api.dialog?.writeTextFile?.({
             defaultPath: `命令模板_${new Date().toISOString().slice(0, 10)}.csv`,
             filters: [{ name: 'CSV 文件', extensions: ['csv'] }]
-        });
+        }, csvContent);
         
-        if (!filePath) return;
+        if (!result) return;
         
-        await window.api.fs?.writeFile?.(filePath, csvContent);
         showToast(`已导出 ${state.templates.length} 个模板`, 'success');
     } catch (error) {
         console.error('导出模板失败:', error);

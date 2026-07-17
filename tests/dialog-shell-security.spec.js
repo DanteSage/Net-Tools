@@ -131,11 +131,11 @@ test.describe('Dialog shell security', () => {
         );
 
         expect(dialogSource).toContain('normalizeOpenPath(filePath, getAllowedOpenDirectories())');
-        expect(dialogSource).toContain('shell.openPath(safePath)');
+        expect(dialogSource).toContain('shellApi.openPath(safePath)');
         expect(dialogSource).toContain('normalizeExternalUrl(url)');
-        expect(dialogSource).toContain('shell.openExternal(safeUrl)');
-        expect(dialogSource).not.toContain('shell.openPath(filePath)');
-        expect(dialogSource).not.toContain('shell.openExternal(url)');
+        expect(dialogSource).toContain('shellApi.openExternal(safeUrl)');
+        expect(dialogSource).not.toContain('shellApi.openPath(filePath)');
+        expect(dialogSource).not.toContain('shellApi.openExternal(url)');
         expect(oplogSource).toContain('normalizeOpenPath(oplogDir, [oplogDir])');
         expect(oplogSource).toContain('shell.openPath(safePath)');
         expect(oplogSource).not.toContain('shell.openPath(getOplogDir())');

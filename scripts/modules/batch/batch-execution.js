@@ -731,14 +731,18 @@ async function exportResults() {
         return `=== ${r.host} (${r.status}) ===\n${r.output || r.error || '无输出'}\n`;
     }).join('\n');
     
-    const filePath = await window.api.dialog?.saveFile?.({
-        defaultPath: `batch_result_${new Date().toISOString().slice(0,10)}.txt`,
-        filters: [{ name: '文本文件', extensions: ['txt'] }]
-    });
-    
-    if (filePath) {
-        await window.api.fs?.writeFile?.(filePath, content);
-        showToast('结果已导出', 'success');
+    try {
+        const result = await window.api.dialog?.writeTextFile?.({
+            defaultPath: `batch_result_${new Date().toISOString().slice(0,10)}.txt`,
+            filters: [{ name: '文本文件', extensions: ['txt'] }]
+        }, content);
+
+        if (result) {
+            showToast('结果已导出', 'success');
+        }
+    } catch (error) {
+        console.error('导出批量执行结果失败:', error);
+        showToast('导出失败: ' + error.message, 'error');
     }
 }
 

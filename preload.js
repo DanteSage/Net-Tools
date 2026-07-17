@@ -246,13 +246,13 @@ contextBridge.exposeInMainWorld('api', {
     dialog: {
         selectFile: (options) => ipcRenderer.invoke('dialog:selectFile', options),
         openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
-        saveFile: (options) => ipcRenderer.invoke('dialog:saveFile', options)
+        saveFile: (options) => ipcRenderer.invoke('dialog:saveFile', options),
+        readTextFile: (options) => ipcRenderer.invoke('dialog:readTextFile', options),
+        writeTextFile: (options, content) => ipcRenderer.invoke('dialog:writeTextFile', options, content)
     },
 
     // ==================== 文件系统 ====================
     fs: {
-        readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
-        writeFile: (filePath, content) => ipcRenderer.invoke('fs:writeFile', filePath, content),
         getPathForFile: (file) => webUtils.getPathForFile(file)
     },
 
