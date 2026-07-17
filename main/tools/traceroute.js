@@ -10,8 +10,11 @@ const { ipcMain } = require('electron');
 const { createToolWindow } = require('../utils/toolWindow');
 
 let tracerouteWindow = null;
-let tracerouteProcess = null;
-let tracerouteRunning = false;
+
+const CLASSIC_TRACE_MIN_WATCHDOG_MS = 30 * 1000;
+const CLASSIC_TRACE_MAX_WATCHDOG_MS = 10 * 60 * 1000;
+const CLASSIC_TRACE_WATCHDOG_GRACE_MS = 15 * 1000;
+const CLASSIC_TRACE_STDERR_LIMIT = 4096;
 
 // ==================== Trippy 状态 ====================
 
@@ -83,32 +86,343 @@ function parseTracertLine(line, hopNum) {
     return null;
 }
 
+function normalizeClassicTraceOptions(options = {}) {
+    const parsedMaxHops = Number.parseInt(options.maxHops, 10);
+    const parsedTimeout = Number.parseInt(options.timeout, 10);
+    return {
+        host: String(options.host || '').trim(),
+        maxHops: Number.isFinite(parsedMaxHops) ? Math.min(64, Math.max(1, parsedMaxHops)) : 30,
+        timeout: Number.isFinite(parsedTimeout) ? Math.min(30000, Math.max(500, parsedTimeout)) : 3000,
+        protocol: options.protocol === 'tcp' ? 'tcp' : 'icmp'
+    };
+}
+
+function calculateClassicTraceWatchdogMs(maxHops, timeout) {
+    const normalized = normalizeClassicTraceOptions({ maxHops, timeout });
+    const effectiveProbeTimeout = Math.max(1000, normalized.timeout);
+    const expectedWorstCase = normalized.maxHops * effectiveProbeTimeout * 3
+        + CLASSIC_TRACE_WATCHDOG_GRACE_MS;
+    return Math.min(
+        CLASSIC_TRACE_MAX_WATCHDOG_MS,
+        Math.max(CLASSIC_TRACE_MIN_WATCHDOG_MS, expectedWorstCase)
+    );
+}
+
+function createClassicTraceTask(options = {}) {
+    const spawnProcess = typeof options.spawnProcess === 'function' ? options.spawnProcess : spawn;
+    const killProcess = typeof options.killProcess === 'function'
+        ? options.killProcess
+        : (proc) => { try { proc?.kill(); } catch (_) {} };
+    const setTimeoutFn = typeof options.setTimeoutFn === 'function' ? options.setTimeoutFn : setTimeout;
+    const clearTimeoutFn = typeof options.clearTimeoutFn === 'function' ? options.clearTimeoutFn : clearTimeout;
+    const onHop = typeof options.onHop === 'function' ? options.onHop : () => true;
+    const onComplete = typeof options.onComplete === 'function' ? options.onComplete : () => {};
+    const owner = options.owner || null;
+    const traceOptions = normalizeClassicTraceOptions(options);
+    const requestId = typeof options.requestId === 'string' || typeof options.requestId === 'number'
+        ? String(options.requestId).trim().slice(0, 128) || null
+        : null;
+    const watchdogMs = Number.isFinite(options.watchdogMs) && options.watchdogMs > 0
+        ? Math.max(1, Math.floor(options.watchdogMs))
+        : calculateClassicTraceWatchdogMs(traceOptions.maxHops, traceOptions.timeout);
+
+    let proc = null;
+    let timer = null;
+    let settled = false;
+    let reached = false;
+    let buffer = '';
+    let stderrTail = '';
+    let hopCount = 0;
+    let resolveTask;
+
+    const promise = new Promise(resolve => {
+        resolveTask = resolve;
+    });
+
+    const onOwnerDestroyed = () => {
+        finish({
+            success: false,
+            error: '路由追踪窗口已关闭',
+            cancelled: true,
+            code: null
+        }, { terminateProcess: true, notify: false });
+    };
+
+    const removeOwnerListener = () => {
+        if (!owner) return;
+        try { owner.removeListener?.('destroyed', onOwnerDestroyed); } catch (_) {}
+    };
+
+    function finish(result, finishOptions = {}) {
+        if (settled) return false;
+        settled = true;
+        if (timer !== null) {
+            try { clearTimeoutFn(timer); } catch (_) {}
+            timer = null;
+        }
+        removeOwnerListener();
+        if (finishOptions.terminateProcess && proc) {
+            try { killProcess(proc); } catch (_) {}
+        }
+
+        const finalResult = { ...result, reached, requestId };
+        if (finishOptions.notify !== false) {
+            try { onComplete(finalResult); } catch (_) {}
+        }
+        resolveTask(finalResult);
+        return true;
+    }
+
+    const task = {
+        promise,
+        stop(reason = '路由追踪已停止', stopOptions = {}) {
+            return finish({
+                success: false,
+                error: reason,
+                cancelled: true,
+                code: null
+            }, {
+                terminateProcess: true,
+                notify: stopOptions.notify !== false
+            });
+        },
+        isSettled() {
+            return settled;
+        },
+        get process() {
+            return proc;
+        }
+    };
+
+    if (!traceOptions.host) {
+        finish({ success: false, error: '请输入有效的目标主机', code: null });
+        return task;
+    }
+
+    if (owner && typeof owner.once === 'function') {
+        try { owner.once('destroyed', onOwnerDestroyed); } catch (_) {}
+    }
+    if (owner && typeof owner.isDestroyed === 'function' && owner.isDestroyed()) {
+        onOwnerDestroyed();
+        return task;
+    }
+
+    const isWindows = (options.platform || process.platform) === 'win32';
+    let cmd;
+    let args;
+    if (traceOptions.protocol === 'tcp' && !isWindows) {
+        cmd = 'traceroute';
+        args = [
+            '-T', '-m', String(traceOptions.maxHops),
+            '-w', String(Math.max(1, Math.floor(traceOptions.timeout / 1000))),
+            traceOptions.host
+        ];
+    } else {
+        cmd = isWindows ? 'tracert' : 'traceroute';
+        args = isWindows
+            ? ['-h', String(traceOptions.maxHops), '-w', String(traceOptions.timeout), traceOptions.host]
+            : [
+                '-m', String(traceOptions.maxHops),
+                '-w', String(Math.max(1, Math.floor(traceOptions.timeout / 1000))),
+                traceOptions.host
+            ];
+    }
+
+    try {
+        proc = spawnProcess(cmd, args, { windowsHide: true });
+    } catch (error) {
+        finish({ success: false, error: error.message, code: null });
+        return task;
+    }
+
+    const processLine = (line) => {
+        if (settled) return;
+        const result = parseTracertLine(line.replace(/\r/g, ''), hopCount + 1);
+        if (!result) return;
+        hopCount += 1;
+        if (result.ip === traceOptions.host || (result.hostname && result.hostname.includes(traceOptions.host))) {
+            reached = true;
+        }
+        try {
+            if (onHop({ ...result, requestId }) === false) {
+                finish({
+                    success: false,
+                    error: '路由追踪窗口已关闭',
+                    cancelled: true,
+                    code: null
+                }, { terminateProcess: true, notify: false });
+            }
+        } catch (error) {
+            finish({
+                success: false,
+                error: `发送路由追踪结果失败: ${error.message}`,
+                code: null
+            }, { terminateProcess: true, notify: false });
+        }
+    };
+
+    proc.stdout?.on('data', (data) => {
+        if (settled) return;
+        buffer += data.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) processLine(line);
+    });
+    proc.stdout?.once('error', (error) => {
+        finish({
+            success: false,
+            error: `路由追踪输出流错误: ${error.message}`,
+            code: null
+        }, { terminateProcess: true });
+    });
+
+    proc.stderr?.on('data', (data) => {
+        if (settled) return;
+        stderrTail = (stderrTail + data.toString()).slice(-CLASSIC_TRACE_STDERR_LIMIT);
+    });
+    proc.stderr?.once('error', (error) => {
+        finish({
+            success: false,
+            error: `路由追踪错误流异常: ${error.message}`,
+            code: null
+        }, { terminateProcess: true });
+    });
+
+    proc.once('error', (error) => {
+        finish({ success: false, error: error.message, code: null }, { terminateProcess: true });
+    });
+
+    proc.once('close', (code, signal) => {
+        if (settled) return;
+        if (buffer.trim()) processLine(buffer);
+        if (settled) return;
+        if (code === 0 && !signal) {
+            finish({ success: true, code, signal: null });
+            return;
+        }
+        const detail = stderrTail.trim();
+        const suffix = detail ? `: ${detail}` : '';
+        finish({
+            success: false,
+            error: `路由追踪异常退出（退出码 ${code ?? '未知'}${signal ? `，信号 ${signal}` : ''}）${suffix}`,
+            code: code ?? null,
+            signal: signal || null
+        });
+    });
+
+    try {
+        timer = setTimeoutFn(() => {
+            finish({
+                success: false,
+                error: '路由追踪超时，进程已终止',
+                timedOut: true,
+                code: null
+            }, { terminateProcess: true });
+        }, watchdogMs);
+        timer?.unref?.();
+    } catch (error) {
+        finish({
+            success: false,
+            error: `无法启动路由追踪看门狗: ${error.message}`,
+            code: null
+        }, { terminateProcess: true });
+    }
+
+    return task;
+}
+
+function createClassicTraceController(options = {}) {
+    let activeTask = null;
+
+    return {
+        start(params = {}) {
+            if (activeTask && !activeTask.isSettled()) {
+                const requestId = typeof params.requestId === 'string' || typeof params.requestId === 'number'
+                    ? String(params.requestId).trim().slice(0, 128) || null
+                    : null;
+                return Promise.resolve({
+                    success: false,
+                    error: '已有正在运行的路由追踪任务',
+                    busy: true,
+                    reached: false,
+                    requestId
+                });
+            }
+            const task = createClassicTraceTask({
+                ...params,
+                spawnProcess: options.spawnProcess,
+                killProcess: options.killProcess,
+                setTimeoutFn: options.setTimeoutFn,
+                clearTimeoutFn: options.clearTimeoutFn,
+                watchdogMs: options.watchdogMs,
+                platform: options.platform
+            });
+            activeTask = task;
+            return task.promise.finally(() => {
+                if (activeTask === task) activeTask = null;
+            });
+        },
+        stop(reason, stopOptions) {
+            if (!activeTask || activeTask.isSettled()) return false;
+            return activeTask.stop(reason, stopOptions);
+        },
+        isRunning() {
+            return Boolean(activeTask && !activeTask.isSettled());
+        }
+    };
+}
+
 /**
  * 注册路由追踪工具相关 IPC 处理程序
  */
-function registerTracerouteHandlers(context) {
-    const { getMainWindow } = context;
+function registerTracerouteHandlers(context, dependencies = {}) {
+    const ipc = dependencies.ipcMain || ipcMain;
+    const classicTraceController = createClassicTraceController({
+        spawnProcess: dependencies.spawnProcess,
+        killProcess: dependencies.killProcess,
+        setTimeoutFn: dependencies.setTimeoutFn,
+        clearTimeoutFn: dependencies.clearTimeoutFn,
+        watchdogMs: dependencies.watchdogMs,
+        platform: dependencies.platform
+    });
 
-    ipcMain.handle('traceroute:open', async () => {
+    const sendToOwner = (owner, channel, payload) => {
+        if (!owner || (typeof owner.isDestroyed === 'function' && owner.isDestroyed())) return false;
+        try {
+            owner.send(channel, payload);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    };
+
+    ipc.handle('traceroute:open', async () => {
         if (tracerouteWindow && !tracerouteWindow.isDestroyed()) {
             tracerouteWindow.focus();
             return { success: true };
         }
         
-        ({ win: tracerouteWindow } = createToolWindow({
-            toolId: 'traceroute',
-            width: 1000,
-            height: 750,
-            resizable: true
-        }, path.join(__dirname, '..', '..', 'Route Tracking', 'index.html')));
-        
-        tracerouteWindow.on('closed', () => {
-            tracerouteWindow = null;
-            tracerouteRunning = false;
-            if (tracerouteProcess) {
-                tracerouteProcess.kill();
-                tracerouteProcess = null;
-            }
+        const rendererPath = path.join(__dirname, '..', '..', 'Route Tracking', 'index.html');
+        if (dependencies.createToolWindow) {
+            ({ win: tracerouteWindow } = dependencies.createToolWindow({
+                toolId: 'traceroute',
+                width: 1000,
+                height: 750,
+                resizable: true
+            }, rendererPath));
+        } else {
+            ({ win: tracerouteWindow } = createToolWindow({
+                toolId: 'traceroute',
+                width: 1000,
+                height: 750,
+                resizable: true
+            }, rendererPath));
+        }
+
+        const openedWindow = tracerouteWindow;
+        openedWindow.on('closed', () => {
+            if (tracerouteWindow === openedWindow) tracerouteWindow = null;
+            classicTraceController.stop('路由追踪窗口已关闭', { notify: false });
             cleanupTrippy();
         });
         
@@ -116,7 +430,7 @@ function registerTracerouteHandlers(context) {
     });
 
     // DNS 反向解析
-    ipcMain.handle('traceroute:reverseDns', async (event, ip) => {
+    ipc.handle('traceroute:reverseDns', async (event, ip) => {
         if (!ip || ip === '*') return null;
         try {
             const hostnames = await dns.reverse(ip);
@@ -127,84 +441,20 @@ function registerTracerouteHandlers(context) {
     });
 
     // 开始路由追踪
-    ipcMain.handle('traceroute:start', async (event, { host, maxHops, timeout, protocol = 'icmp' }) => {
-        tracerouteRunning = true;
-        let reached = false;
-        
-        return new Promise((resolve, reject) => {
-            const isWindows = process.platform === 'win32';
-            let cmd, args;
-            
-            if (protocol === 'tcp' && !isWindows) {
-                cmd = 'traceroute';
-                args = ['-T', '-m', maxHops.toString(), '-w', Math.floor(timeout / 1000).toString(), host];
-            } else {
-                cmd = isWindows ? 'tracert' : 'traceroute';
-                args = isWindows 
-                    ? ['-h', maxHops.toString(), '-w', Math.floor(timeout).toString(), host]
-                    : ['-m', maxHops.toString(), '-w', Math.floor(timeout / 1000).toString(), host];
-            }
-            
-            tracerouteProcess = spawn(cmd, args, { windowsHide: true });
-            
-            let buffer = '';
-            let hopCount = 0;
-            
-            tracerouteProcess.stdout.on('data', (data) => {
-                if (!tracerouteRunning) return;
-                
-                let text = data.toString();
-                buffer += text;
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-                
-                for (const line of lines) {
-                    const result = parseTracertLine(line.replace(/\r/g, ''), hopCount + 1);
-                    if (result) {
-                        hopCount++;
-                        
-                        if (result.ip === host || (result.hostname && result.hostname.includes(host))) {
-                            reached = true;
-                        }
-                        
-                        if (tracerouteWindow && !tracerouteWindow.isDestroyed()) {
-                            tracerouteWindow.webContents.send('traceroute:hop', result);
-                        }
-                    }
-                }
-            });
-            
-            tracerouteProcess.stderr.on('data', (data) => {
-                console.error('Traceroute stderr:', data.toString());
-            });
-            
-            tracerouteProcess.on('close', (code) => {
-                tracerouteRunning = false;
-                tracerouteProcess = null;
-                
-                if (tracerouteWindow && !tracerouteWindow.isDestroyed()) {
-                    tracerouteWindow.webContents.send('traceroute:complete', { reached, code });
-                }
-                
-                resolve({ success: true, reached });
-            });
-            
-            tracerouteProcess.on('error', (err) => {
-                tracerouteRunning = false;
-                tracerouteProcess = null;
-                reject(err);
-            });
+    ipc.handle('traceroute:start', async (event, options = {}) => {
+        const owner = event?.sender || tracerouteWindow?.webContents || null;
+        return classicTraceController.start({
+            ...options,
+            owner,
+            onHop: (result) => sendToOwner(owner, 'traceroute:hop', result),
+            onComplete: (result) => sendToOwner(owner, 'traceroute:complete', result)
         });
     });
 
     // 停止路由追踪
-    ipcMain.handle('traceroute:stop', () => {
-        tracerouteRunning = false;
-        if (tracerouteProcess) {
-            tracerouteProcess.kill();
-            tracerouteProcess = null;
-        }
-        return { success: true };
+    ipc.handle('traceroute:stop', () => {
+        const stopped = classicTraceController.stop('路由追踪已停止');
+        return { success: true, stopped };
     });
 
     // ==================== Trippy 模式 ====================
@@ -381,7 +631,7 @@ function registerTracerouteHandlers(context) {
     }
 
     /** 启动 Trippy 连续探测 */
-    ipcMain.handle('traceroute:trippy-start', async (event, opts) => {
+    ipc.handle('traceroute:trippy-start', async (event, opts) => {
         if (trippyRunning) {
             return { success: false, error: '已有正在运行的 Trippy 探测' };
         }
@@ -453,7 +703,7 @@ function registerTracerouteHandlers(context) {
     });
 
     /** 停止 Trippy 探测 */
-    ipcMain.handle('traceroute:trippy-stop', () => {
+    ipc.handle('traceroute:trippy-stop', () => {
         trippyRunning = false;
         if (trippyTimer) {
             clearTimeout(trippyTimer);
@@ -468,7 +718,7 @@ function registerTracerouteHandlers(context) {
     });
 
     /** GeoIP / ASN 查询（使用 ip-api.com 免费接口） */
-    ipcMain.handle('traceroute:lookup-geoip', async (event, ip) => {
+    ipc.handle('traceroute:lookup-geoip', async (event, ip) => {
         if (!ip) return null;
         if (geoipCache.has(ip)) return geoipCache.get(ip);
         // 私有地址不查询
@@ -520,4 +770,11 @@ function cleanupTrippy() {
     if (trippyDiscoveryProc) { try { trippyDiscoveryProc.kill(); } catch (_) {} trippyDiscoveryProc = null; }
 }
 
-module.exports = { registerTracerouteHandlers };
+module.exports = {
+    CLASSIC_TRACE_MIN_WATCHDOG_MS,
+    CLASSIC_TRACE_MAX_WATCHDOG_MS,
+    calculateClassicTraceWatchdogMs,
+    createClassicTraceTask,
+    createClassicTraceController,
+    registerTracerouteHandlers
+};

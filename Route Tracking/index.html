@@ -704,19 +704,28 @@
         });
 
         // ==================== 基础追踪 ====================
-        let isTracing = false, traceResults = [], hostnames = {};
+        let isTracing = false, traceResults = [], hostnames = {}, traceRunId = 0;
+        let traceRequestSeq = 0, activeTraceRequestId = null;
         let currentMode = null; // 'trace' | 'mtr' - 用于避免监听器冲突
+
+        function nextTraceRequestId(prefix) {
+            traceRequestSeq += 1;
+            return `${prefix}-${traceRequestSeq}`;
+        }
 
         document.querySelectorAll('.preset-btn').forEach(btn => {
             btn.addEventListener('click', () => document.getElementById('hostInput').value = btn.dataset.host);
         });
 
-        async function resolveHostnames() {
+        async function resolveHostnames(runId) {
             if (!document.getElementById('resolveDns').checked) return;
-            for (const r of traceResults) {
+            const results = traceResults.slice();
+            for (const r of results) {
+                if (runId !== traceRunId) return;
                 if (r.ip && !hostnames[r.ip]) {
                     try {
                         const hostname = await ipcRenderer.invoke('traceroute:reverseDns', r.ip);
+                        if (runId !== traceRunId) return;
                         if (hostname) { hostnames[r.ip] = hostname; updateHopHostname(r.hop, hostname); }
                     } catch (e) {}
                 }
@@ -736,6 +745,7 @@
         }
 
         async function startTrace() {
+            if (isTracing) return;
             const host = document.getElementById('hostInput').value.trim();
             const maxHops = parseInt(document.getElementById('maxHopsInput').value) || 30;
             const timeout = parseInt(document.getElementById('timeoutInput').value) || 3000;
@@ -743,6 +753,9 @@
             if (mtrRunning) { alert('MTR 正在运行，请先停止'); return; }
             if (trippyRunning) { alert('Trippy 正在运行，请先停止'); return; }
 
+            const runId = ++traceRunId;
+            const requestId = nextTraceRequestId('trace');
+            activeTraceRequestId = requestId;
             currentMode = 'trace';
             isTracing = true; traceResults = []; hostnames = {};
             updateUI();
@@ -752,18 +765,37 @@
             resetRouteVisual(); updateStats();
             document.getElementById('destHost').textContent = host;
 
-            try { await ipcRenderer.invoke('traceroute:start', { host, maxHops, timeout, protocol: 'icmp' }); }
-            catch (err) { console.error('路由追踪失败:', err); }
-
-            await resolveHostnames();
-            drawLatencyChart();
-            isTracing = false;
-            updateUI();
-            document.getElementById('exportBtn').disabled = traceResults.length === 0;
+            try {
+                const result = await ipcRenderer.invoke('traceroute:start', {
+                    host, maxHops, timeout, protocol: 'icmp', requestId
+                });
+                if (runId !== traceRunId) return;
+                if (!result || result.requestId !== requestId) {
+                    throw new Error('路由追踪响应与当前任务不匹配');
+                }
+                if (result && !result.success && !result.cancelled) {
+                    alert(result.error || '路由追踪失败');
+                }
+                await resolveHostnames(runId);
+                if (runId !== traceRunId) return;
+                drawLatencyChart();
+            } catch (err) {
+                if (runId === traceRunId) alert(err.message || '路由追踪失败');
+            } finally {
+                if (runId === traceRunId) {
+                    activeTraceRequestId = null;
+                    isTracing = false;
+                    updateUI();
+                    document.getElementById('exportBtn').disabled = traceResults.length === 0;
+                }
+            }
         }
 
         function stopTrace() {
-            ipcRenderer.invoke('traceroute:stop');
+            if (!isTracing) return;
+            traceRunId += 1;
+            activeTraceRequestId = null;
+            ipcRenderer.invoke('traceroute:stop').catch(err => console.error('停止路由追踪失败:', err));
             isTracing = false;
             updateUI();
             document.getElementById('exportBtn').disabled = traceResults.length === 0;
@@ -819,12 +851,14 @@
 
         // IPC
         ipcRenderer.on('traceroute:hop', (e, result) => {
-            if (currentMode === 'trace') {
+            if (currentMode === 'trace' && activeTraceRequestId && result
+                && result.requestId === activeTraceRequestId) {
                 traceResults.push(result); updateStats(); appendHop(result); updateRouteSummary(); addRouteNode(result);
             }
         });
         ipcRenderer.on('traceroute:complete', (e, data) => {
-            if (currentMode === 'trace' && data && data.reached) {
+            if (currentMode === 'trace' && activeTraceRequestId && data
+                && data.requestId === activeTraceRequestId && data.success && data.reached) {
                 addEndNode(document.getElementById('hostInput').value.trim());
             }
         });
@@ -916,25 +950,30 @@
             resetMtrRoutePath();
             updateMtrStats();
 
-            for (let r = 0; r < rounds && !mtrAbort; r++) {
-                mtrRound = r + 1;
-                document.getElementById('mtrRoundNum').textContent = `${mtrRound}/${rounds}`;
-                
-                const result = await doMtrTrace(host);
-                updateMtrData(result);
-                renderMtrTable();
-                renderMtrRoutePath(host);
-                updateMtrStats();
-                
-                // 完成后更新进度条
-                document.getElementById('mtrProgressBar').style.width = (mtrRound / rounds * 100) + '%';
-                
-                if (r < rounds - 1 && !mtrAbort) await new Promise(r => setTimeout(r, 1000));
-            }
+            try {
+                for (let r = 0; r < rounds && !mtrAbort; r++) {
+                    mtrRound = r + 1;
+                    document.getElementById('mtrRoundNum').textContent = `${mtrRound}/${rounds}`;
 
-            mtrRunning = false;
-            document.getElementById('mtrBtn').disabled = false;
-            document.getElementById('mtrStopBtn').disabled = true;
+                    const result = await doMtrTrace(host);
+                    if (mtrAbort) break;
+                    updateMtrData(result);
+                    renderMtrTable();
+                    renderMtrRoutePath(host);
+                    updateMtrStats();
+
+                    // 完成后更新进度条
+                    document.getElementById('mtrProgressBar').style.width = (mtrRound / rounds * 100) + '%';
+
+                    if (r < rounds - 1 && !mtrAbort) await new Promise(r => setTimeout(r, 1000));
+                }
+            } catch (err) {
+                if (!mtrAbort) alert(err.message || 'MTR 路由追踪失败');
+            } finally {
+                mtrRunning = false;
+                document.getElementById('mtrBtn').disabled = false;
+                document.getElementById('mtrStopBtn').disabled = true;
+            }
         }
 
         function stopMtr() {
@@ -943,13 +982,49 @@
         }
 
         async function doMtrTrace(host) {
-            return new Promise(resolve => {
+            return new Promise((resolve, reject) => {
                 const results = [];
-                const hopHandler = (e, r) => results.push(r);
-                const completeHandler = () => { ipcRenderer.removeListener('traceroute:hop', hopHandler); resolve(results); };
+                const requestId = nextTraceRequestId('mtr');
+                let settled = false;
+                const hopHandler = (e, result) => {
+                    if (result && result.requestId === requestId) results.push(result);
+                };
+                const cleanup = () => {
+                    ipcRenderer.removeListener('traceroute:hop', hopHandler);
+                    ipcRenderer.removeListener('traceroute:complete', completeHandler);
+                };
+                const finish = (error) => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    if (error) reject(error);
+                    else resolve(results);
+                };
+                const completeHandler = (event, result) => {
+                    if (!result || result.requestId !== requestId) return;
+                    if (result && !result.success && !result.cancelled) {
+                        finish(new Error(result.error || 'MTR 路由追踪失败'));
+                    } else {
+                        finish();
+                    }
+                };
                 ipcRenderer.on('traceroute:hop', hopHandler);
-                ipcRenderer.once('traceroute:complete', completeHandler);
-                ipcRenderer.invoke('traceroute:start', { host, maxHops: 30, timeout: 3000, protocol: 'icmp' });
+                ipcRenderer.on('traceroute:complete', completeHandler);
+                ipcRenderer.invoke('traceroute:start', {
+                    host, maxHops: 30, timeout: 3000, protocol: 'icmp', requestId
+                })
+                    .then(result => {
+                        if (!result || result.requestId !== requestId) {
+                            finish(new Error('MTR 路由追踪响应与当前任务不匹配'));
+                            return;
+                        }
+                        if (result && !result.success && !result.cancelled) {
+                            finish(new Error(result.error || 'MTR 路由追踪失败'));
+                        } else {
+                            finish();
+                        }
+                    })
+                    .catch(finish);
             });
         }
 
