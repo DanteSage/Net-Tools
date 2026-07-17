@@ -1,5 +1,33 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+const APP_CLOSE_REQUEST_CHANNEL = 'app:close-request';
+const APP_CLOSE_CONFIRMATION_CHANNEL = 'app:close-confirmed';
+let appCloseRequestCallback = null;
+let pendingAppCloseRequestId = null;
+
+function invokeAppCloseRequestCallback(callback, requestId) {
+    Promise.resolve()
+        .then(() => callback(requestId))
+        .catch((error) => {
+            console.error('关闭确认处理失败:', error);
+            ipcRenderer.send(APP_CLOSE_CONFIRMATION_CHANNEL, {
+                requestId,
+                confirmed: false
+            });
+        });
+}
+
+ipcRenderer.on(APP_CLOSE_REQUEST_CHANNEL, (_event, requestId) => {
+    if (!Number.isSafeInteger(requestId) || requestId <= 0) return;
+
+    if (!appCloseRequestCallback) {
+        pendingAppCloseRequestId = requestId;
+        return;
+    }
+
+    invokeAppCloseRequestCallback(appCloseRequestCallback, requestId);
+});
+
 // 暴露安全的API到渲染进程
 contextBridge.exposeInMainWorld('api', {
     // ==================== 设备管理 ====================
@@ -388,9 +416,19 @@ contextBridge.exposeInMainWorld('api', {
     app: {
         getPaths: () => ipcRenderer.invoke('app:getPaths'),
         onCloseRequest: (callback) => {
-            ipcRenderer.on('app:close-request', () => callback());
+            if (typeof callback !== 'function') return;
+
+            appCloseRequestCallback = callback;
+            if (pendingAppCloseRequestId !== null) {
+                const requestId = pendingAppCloseRequestId;
+                pendingAppCloseRequestId = null;
+                invokeAppCloseRequestCallback(callback, requestId);
+            }
         },
-        confirmClose: (confirmed) => ipcRenderer.send('app:close-confirmed', confirmed)
+        confirmClose: (requestId, confirmed) => ipcRenderer.send(APP_CLOSE_CONFIRMATION_CHANNEL, {
+            requestId,
+            confirmed
+        })
     },
 
     // ==================== 连接统一控制 ====================

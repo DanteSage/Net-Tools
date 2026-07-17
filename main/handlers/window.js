@@ -6,26 +6,28 @@ const { ipcMain, BrowserWindow } = require('electron');
 
 /**
  * 注册窗口控制处理程序
- * @param {Object} context - 包含 getMainWindow 的上下文
+ * @param {Object} _context - 保留的注册上下文
  */
-function registerWindowHandlers(context) {
-    const { getMainWindow } = context;
+function registerWindowHandlers(_context, dependencies = {}) {
+    const ipc = dependencies.ipcMain || ipcMain;
+    const browserWindowApi = dependencies.BrowserWindow || BrowserWindow;
 
     /**
-     * 获取触发事件的窗口（优先使用主窗口）
+     * 获取触发事件的窗口（优先使用事件发送者所属窗口）
      */
     function _resolveWindow(event) {
-        const main = getMainWindow && getMainWindow();
-        if (main && !main.isDestroyed()) return main;
-        return BrowserWindow.fromWebContents(event.sender);
+        if (!event || !event.sender) return null;
+        const senderWindow = browserWindowApi.fromWebContents(event.sender);
+        if (senderWindow && !senderWindow.isDestroyed()) return senderWindow;
+        return null;
     }
 
-    ipcMain.handle('window:minimize', (event) => {
+    ipc.handle('window:minimize', (event) => {
         const win = _resolveWindow(event);
         if (win && !win.isDestroyed()) win.minimize();
     });
 
-    ipcMain.handle('window:toggleMaximize', (event) => {
+    ipc.handle('window:toggleMaximize', (event) => {
         const win = _resolveWindow(event);
         if (!win || win.isDestroyed()) return false;
         if (win.isMaximized()) {
@@ -36,12 +38,12 @@ function registerWindowHandlers(context) {
         return true;
     });
 
-    ipcMain.handle('window:close', (event) => {
+    ipc.handle('window:close', (event) => {
         const win = _resolveWindow(event);
         if (win && !win.isDestroyed()) win.close();
     });
 
-    ipcMain.handle('window:isMaximized', (event) => {
+    ipc.handle('window:isMaximized', (event) => {
         const win = _resolveWindow(event);
         if (!win || win.isDestroyed()) return false;
         return win.isMaximized();

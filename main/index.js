@@ -141,8 +141,6 @@ app.on('before-quit', () => {
  * 所有窗口关闭时
  */
 app.on('window-all-closed', () => {
-    setQuitting(true);
-
     // 关闭所有连接
     closeAllConnections();
 
@@ -150,6 +148,7 @@ app.on('window-all-closed', () => {
     stopSpeedTestServer();
 
     if (process.platform !== 'darwin') {
+        setQuitting(true);
         app.quit();
     }
 });

@@ -4,12 +4,18 @@
 const path = require('path');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { getStoredTheme } = require('./handlers/theme');
+const { registerAppCloseController } = require('./utils/app-close-controller');
 
 let mainWindow = null;
 let splashWindow = null;
 let passwordWindow = null;
 let isQuitting = false;
 let isUnlocked = false;
+
+const appCloseController = registerAppCloseController({
+    ipcMain,
+    getIsQuitting: () => isQuitting
+});
 
 /**
  * 创建启动画面窗口
@@ -91,7 +97,7 @@ function createPasswordWindow() {
  * @param {boolean} requirePassword - 是否需要密码验证
  */
 function createMainWindow(requirePassword = false) {
-    mainWindow = new BrowserWindow({
+    const window = new BrowserWindow({
         width: 1400,
         height: 900,
         minWidth: 1000,
@@ -107,22 +113,23 @@ function createMainWindow(requirePassword = false) {
         icon: path.join(__dirname, '..', 'assets', 'icon.png'),
         title: 'Net Tools'
     });
+    mainWindow = window;
 
     // 同步最大化/还原状态到渲染进程
-    mainWindow.on('maximize', () => {
-        if (!mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('window:maximized', true);
+    window.on('maximize', () => {
+        if (!window.isDestroyed()) {
+            window.webContents.send('window:maximized', true);
         }
     });
-    mainWindow.on('unmaximize', () => {
-        if (!mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('window:maximized', false);
+    window.on('unmaximize', () => {
+        if (!window.isDestroyed()) {
+            window.webContents.send('window:maximized', false);
         }
     });
 
-    mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+    window.loadFile(path.join(__dirname, '..', 'index.html'));
 
-    mainWindow.once('ready-to-show', () => {
+    window.once('ready-to-show', () => {
         setTimeout(() => {
             if (splashWindow && !splashWindow.isDestroyed()) {
                 splashWindow.close();
@@ -134,33 +141,26 @@ function createMainWindow(requirePassword = false) {
                 createPasswordWindow();
             } else {
                 isUnlocked = true;
-                mainWindow.show();
+                if (!window.isDestroyed()) {
+                    window.show();
+                }
             }
         }, 1500);
     });
 
-    // 窗口关闭前确认
-    mainWindow.on('close', (e) => {
-        if (!isQuitting) {
-            e.preventDefault();
-            mainWindow.webContents.send('app:close-request');
-        }
-    });
-
-    // 监听渲染进程的关闭确认
-    ipcMain.on('app:close-confirmed', (event, confirmed) => {
-        if (confirmed) {
-            isQuitting = true;
-            mainWindow.close();
+    appCloseController.attachWindow(window);
+    window.once('closed', () => {
+        if (mainWindow === window) {
+            mainWindow = null;
         }
     });
 
     // 开发模式下打开开发者工具
     if (process.argv.includes('--enable-logging')) {
-        mainWindow.webContents.openDevTools();
+        window.webContents.openDevTools();
     }
 
-    return mainWindow;
+    return window;
 }
 
 /**

@@ -6,6 +6,17 @@
 // ==================== 初始化 ====================
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // 尽早接管 preload 缓存的关闭请求，避免初始化期间丢失确认。
+    window.api.app.onCloseRequest(async (requestId) => {
+        const confirmed = await showConfirm({
+            title: '退出确认',
+            message: '确定要退出 Net Tools 吗？',
+            detail: '所有未保存的连接将会断开。',
+            type: 'warning'
+        });
+        window.api.app.confirmClose(requestId, confirmed);
+    });
+
     const initSteps = [
         { name: 'Titlebar', fn: initTitlebar },
         { name: 'Theme', fn: initTheme },
@@ -41,17 +52,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         console.error('设备数据加载失败:', error);
     }
-
-    // 监听应用关闭请求
-    window.api.app.onCloseRequest(async () => {
-        const confirmed = await showConfirm({
-            title: '退出确认',
-            message: '确定要退出 Net Tools 吗？',
-            detail: '所有未保存的连接将会断开。',
-            type: 'warning'
-        });
-        window.api.app.confirmClose(confirmed);
-    });
 });
 
 // ==================== 全局函数暴露 ====================
