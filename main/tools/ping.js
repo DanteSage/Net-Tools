@@ -55,8 +55,10 @@ function registerPingHandlers(context) {
         }
         
         ({ win: pingWindow } = createToolWindow({
-            width: 750,
-            height: 650,
+            width: 1100,
+            height: 820,
+            minWidth: 600,
+            minHeight: 620,
             resizable: true
         }, path.join(__dirname, '..', '..', 'ping test', 'index.html')));
         

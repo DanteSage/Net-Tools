@@ -96,8 +96,10 @@ function registerTracerouteHandlers(context) {
         }
         
         ({ win: tracerouteWindow } = createToolWindow({
-            width: 1000,
-            height: 750,
+            width: 1280,
+            height: 860,
+            minWidth: 660,
+            minHeight: 640,
             resizable: true
         }, path.join(__dirname, '..', '..', 'Route Tracking', 'index.html')));
         
