@@ -334,6 +334,11 @@ contextBridge.exposeInMainWorld('api', {
         open: () => ipcRenderer.invoke('tshark:open')
     },
 
+    // ==================== PacketLens (pcap 深度分析) ====================
+    packetLens: {
+        open: () => ipcRenderer.invoke('packetLens:open')
+    },
+
     // ==================== BroadcastDetector (广播与环路检测) ====================
     broadcastDetector: {
         open: () => ipcRenderer.invoke('broadcastDetector:open'),

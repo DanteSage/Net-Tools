@@ -44,6 +44,7 @@ const { registerPacketCaptureHandlers } = require('./tools/packet-capture');
 const { registerNetcatHandlers } = require('./tools/netcat');
 const { registerDnsLookupHandlers } = require('./tools/dns-lookup');
 const { registerTsharkAnalyzerHandlers } = require('./tools/tshark-analyzer');
+const { registerPacketLensHandlers, stopPacketLensServer } = require('./tools/packetlens');
 const { registerFtpClientHandlers } = require('./tools/ftp-client');
 const { registerFtpServerHandlers } = require('./tools/ftp-server');
 const { registerCopilotHandlers } = require('./tools/copilot');
@@ -93,6 +94,7 @@ function registerAllHandlers() {
     registerNetcatHandlers(context);
     registerDnsLookupHandlers(context);
     registerTsharkAnalyzerHandlers(context);
+    registerPacketLensHandlers();
     registerFtpClientHandlers(context);
     registerFtpServerHandlers(context);
     registerCopilotHandlers(context);
@@ -135,6 +137,7 @@ app.whenReady().then(() => {
  */
 app.on('before-quit', () => {
     setQuitting(true);
+    stopPacketLensServer();
 });
 
 /**

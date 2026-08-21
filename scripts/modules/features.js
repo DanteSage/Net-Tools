@@ -95,6 +95,17 @@ async function openTsharkAnalyzer() {
     }
 }
 
+async function openPacketLens() {
+    try {
+        const result = await window.api.packetLens.open();
+        if (result && !result.success) {
+            showToast('启动失败: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showToast('启动 PacketLens 失败: ' + error.message, 'error');
+    }
+}
+
 async function openBroadcastDetector() {
     try {
         const result = await window.api.broadcastDetector.open();
@@ -137,5 +148,4 @@ async function openTftpServer() {
         showToast('启动 TFTP 服务端失败: ' + error.message, 'error');
     }
 }
-
 

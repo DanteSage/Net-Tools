@@ -82,6 +82,7 @@ window.openPacketCapture = openPacketCapture;
 window.openNetcat = openNetcat;
 window.openDnsLookup = openDnsLookup;
 window.openTsharkAnalyzer = openTsharkAnalyzer;
+window.openPacketLens = openPacketLens;
 window.openBroadcastDetector = openBroadcastDetector;
 window.openFtpClient = openFtpClient;
 window.openFtpServer = openFtpServer;

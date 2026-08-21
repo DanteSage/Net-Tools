@@ -1,4 +1,5 @@
 const { test, expect, _electron: electron } = require('@playwright/test');
+const path = require('path');
 
 async function waitForMainWindow(electronApp, timeout = 30000) {
   const start = Date.now();
@@ -27,8 +28,14 @@ test.describe('Net Tools app smoke', () => {
     let electronApp;
     try {
       electronApp = await electron.launch({
-        args: ['.'],
-        env: { ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
+        args: [
+          '.',
+          `--user-data-dir=${path.join(process.cwd(), 'test-results', 'appdata-smoke')}`
+        ],
+        env: {
+          APPDATA: path.join(process.cwd(), 'test-results', 'appdata-smoke'),
+          ELECTRON_DISABLE_SECURITY_WARNINGS: 'true'
+        }
       });
 
       const mainWindow = await waitForMainWindow(electronApp);
