@@ -3,26 +3,37 @@
  */
 const path = require('path');
 const net = require('net');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const { ipcMain } = require('electron');
 const { createToolWindow } = require('../utils/toolWindow');
+const {
+    assertIpcSender,
+    buildPingInvocation,
+    normalizeHost,
+    requireInteger,
+    requirePlainObject
+} = require('../utils/security');
 
 let pingWindow = null;
 let pingRunning = false;
+let activePingProcess = null;
 
 /**
  * Ping 实现 - 使用系统 ping 命令
  */
 function pingHost(host, timeout) {
     return new Promise((resolve) => {
-        const timeoutSec = Math.ceil(timeout / 1000);
-        const cmd = process.platform === 'win32'
-            ? `ping -n 1 -w ${timeout} ${host}`
-            : `ping -c 1 -W ${timeoutSec} ${host}`;
+        const { command, args } = buildPingInvocation(host, timeout);
         
         const startTime = Date.now();
         
-        exec(cmd, { timeout: timeout + 2000, windowsHide: true }, (error, stdout, stderr) => {
+        const child = execFile(command, args, {
+            timeout: timeout + 2000,
+            windowsHide: true,
+            shell: false,
+            maxBuffer: 1024 * 1024
+        }, (error, stdout) => {
+            if (activePingProcess === child) activePingProcess = null;
             const totalTime = Date.now() - startTime;
             
             if (error) {
@@ -39,7 +50,16 @@ function pingHost(host, timeout) {
             
             resolve({ success: isSuccess, host, time: isSuccess ? time : 0 });
         });
+        activePingProcess = child;
     });
+}
+
+function stopPing() {
+    pingRunning = false;
+    if (activePingProcess) {
+        try { activePingProcess.kill(); } catch (_) {}
+        activePingProcess = null;
+    }
 }
 
 /**
@@ -48,7 +68,8 @@ function pingHost(host, timeout) {
 function registerPingHandlers(context) {
     const { getMainWindow } = context;
 
-    ipcMain.handle('ping:open', async () => {
+    ipcMain.handle('ping:open', async (event) => {
+        assertIpcSender(event, [getMainWindow], 'ping:open');
         if (pingWindow && !pingWindow.isDestroyed()) {
             pingWindow.focus();
             return { success: true };
@@ -64,14 +85,20 @@ function registerPingHandlers(context) {
         
         pingWindow.on('closed', () => {
             pingWindow = null;
-            pingRunning = false;
+            stopPing();
         });
         
         return { success: true };
     });
 
     // 开始 Ping
-    ipcMain.handle('ping:start', async (event, { host, count, timeout, interval = 1000 }) => {
+    ipcMain.handle('ping:start', async (event, request) => {
+        assertIpcSender(event, [() => pingWindow], 'ping:start');
+        requirePlainObject(request);
+        const host = normalizeHost(request.host);
+        const count = requireInteger(request.count, '探测次数', 1, 10000);
+        const timeout = requireInteger(request.timeout, '超时时间', 100, 60000);
+        const interval = requireInteger(request.interval ?? 1000, '探测间隔', 100, 60000);
         pingRunning = true;
         
         for (let i = 0; i < count && pingRunning; i++) {
@@ -95,13 +122,18 @@ function registerPingHandlers(context) {
     });
 
     // 停止 Ping
-    ipcMain.handle('ping:stop', () => {
-        pingRunning = false;
+    ipcMain.handle('ping:stop', (event) => {
+        assertIpcSender(event, [() => pingWindow], 'ping:stop');
+        stopPing();
         return { success: true };
     });
 
     // 直接 Ping 单个主机（TCP 方式）
     ipcMain.handle('ping:host', async (event, host, port = 22, timeout = 3000) => {
+        assertIpcSender(event, [getMainWindow], 'ping:host');
+        host = normalizeHost(host);
+        port = requireInteger(port, '端口', 1, 65535);
+        timeout = requireInteger(timeout, '超时时间', 100, 60000);
         return new Promise((resolve) => {
             const startTime = Date.now();
             const socket = new net.Socket();

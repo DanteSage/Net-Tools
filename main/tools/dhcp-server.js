@@ -5,6 +5,8 @@ const path = require('path');
 const { ipcMain } = require('electron');
 const { createToolWindow } = require('../utils/toolWindow');
 const DhcpServerBackend = require('./dhcp-server-backend');
+const { assertIpcSender } = require('../utils/security');
+const { validateDhcpServerConfig } = require('./server-config');
 
 let dhcpServerWindow = null;
 let dhcpServerInstance = null;
@@ -15,7 +17,8 @@ let forceClose = false;
  */
 function registerDhcpServerHandlers(context) {
     // 监听渲染进程发来的确认关闭通知
-    ipcMain.on('dhcpServer:confirm-close', () => {
+    ipcMain.on('dhcpServer:confirm-close', (event) => {
+        assertIpcSender(event, [() => dhcpServerWindow], 'dhcpServer:confirm-close');
         forceClose = true;
         if (dhcpServerWindow && !dhcpServerWindow.isDestroyed()) {
             dhcpServerWindow.close();
@@ -24,13 +27,16 @@ function registerDhcpServerHandlers(context) {
 
     // 监听渲染进程发来的回收租约通知
     ipcMain.on('dhcpServer:revoke-lease', (event, mac) => {
+        assertIpcSender(event, [() => dhcpServerWindow], 'dhcpServer:revoke-lease');
+        if (typeof mac !== 'string' || !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(mac)) return;
         if (dhcpServerInstance) {
             dhcpServerInstance.revokeLease(mac);
         }
     });
 
     // 打开 DHCP 服务端独立窗口
-    ipcMain.handle('dhcpServer:open', async () => {
+    ipcMain.handle('dhcpServer:open', async (event) => {
+        assertIpcSender(event, [context.getMainWindow], 'dhcpServer:open');
         if (dhcpServerWindow && !dhcpServerWindow.isDestroyed()) {
             dhcpServerWindow.focus();
             return { success: true };
@@ -64,20 +70,14 @@ function registerDhcpServerHandlers(context) {
 
     // 开启 DHCP 服务器
     ipcMain.handle('dhcpServer:start', async (event, config) => {
+        assertIpcSender(event, [() => dhcpServerWindow], 'dhcpServer:start');
         if (dhcpServerInstance) {
             return { success: false, error: 'DHCP 服务器已在运行中' };
         }
 
         try {
-            dhcpServerInstance = new DhcpServerBackend({
-                interfaceIp: config.interfaceIp,
-                startIp: config.startIp,
-                endIp: config.endIp,
-                subnetMask: config.subnetMask,
-                gateway: config.gateway || null,
-                dnsList: config.dnsList || [],
-                leaseTime: config.leaseTime
-            });
+            const safeConfig = validateDhcpServerConfig(config);
+            dhcpServerInstance = new DhcpServerBackend(safeConfig);
 
             // 监听日志事件
             dhcpServerInstance.on('log', (logObj) => {
@@ -106,7 +106,8 @@ function registerDhcpServerHandlers(context) {
     });
 
     // 停止 DHCP 服务器
-    ipcMain.handle('dhcpServer:stop', async () => {
+    ipcMain.handle('dhcpServer:stop', async (event) => {
+        assertIpcSender(event, [() => dhcpServerWindow], 'dhcpServer:stop');
         if (!dhcpServerInstance) {
             return { success: true };
         }

@@ -5,9 +5,16 @@ const path = require('path');
 const net = require('net');
 const dns = require('dns').promises;
 const http = require('http');
-const { spawn, exec } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const { ipcMain } = require('electron');
 const { createToolWindow } = require('../utils/toolWindow');
+const {
+    assertIpcSender,
+    buildPingInvocation,
+    normalizeHost,
+    requireInteger,
+    requirePlainObject
+} = require('../utils/security');
 
 let tracerouteWindow = null;
 let tracerouteProcess = null;
@@ -89,7 +96,8 @@ function parseTracertLine(line, hopNum) {
 function registerTracerouteHandlers(context) {
     const { getMainWindow } = context;
 
-    ipcMain.handle('traceroute:open', async () => {
+    ipcMain.handle('traceroute:open', async (event) => {
+        assertIpcSender(event, [getMainWindow], 'traceroute:open');
         if (tracerouteWindow && !tracerouteWindow.isDestroyed()) {
             tracerouteWindow.focus();
             return { success: true };
@@ -118,7 +126,10 @@ function registerTracerouteHandlers(context) {
 
     // DNS 反向解析
     ipcMain.handle('traceroute:reverseDns', async (event, ip) => {
+        assertIpcSender(event, [getMainWindow, () => tracerouteWindow], 'traceroute:reverseDns');
         if (!ip || ip === '*') return null;
+        ip = normalizeHost(ip, 'IP 地址');
+        if (!net.isIP(ip)) return null;
         try {
             const hostnames = await dns.reverse(ip);
             return hostnames[0] || null;
@@ -128,7 +139,13 @@ function registerTracerouteHandlers(context) {
     });
 
     // 开始路由追踪
-    ipcMain.handle('traceroute:start', async (event, { host, maxHops, timeout, protocol = 'icmp' }) => {
+    ipcMain.handle('traceroute:start', async (event, request) => {
+        assertIpcSender(event, [() => tracerouteWindow], 'traceroute:start');
+        requirePlainObject(request);
+        const host = normalizeHost(request.host);
+        const maxHops = requireInteger(request.maxHops, '最大跳数', 1, 64);
+        const timeout = requireInteger(request.timeout, '超时时间', 100, 60000);
+        const protocol = request.protocol === 'tcp' ? 'tcp' : 'icmp';
         tracerouteRunning = true;
         let reached = false;
         
@@ -146,7 +163,7 @@ function registerTracerouteHandlers(context) {
                     : ['-m', maxHops.toString(), '-w', Math.floor(timeout / 1000).toString(), host];
             }
             
-            tracerouteProcess = spawn(cmd, args, { windowsHide: true });
+            tracerouteProcess = spawn(cmd, args, { windowsHide: true, shell: false });
             
             let buffer = '';
             let hopCount = 0;
@@ -199,7 +216,8 @@ function registerTracerouteHandlers(context) {
     });
 
     // 停止路由追踪
-    ipcMain.handle('traceroute:stop', () => {
+    ipcMain.handle('traceroute:stop', (event) => {
+        assertIpcSender(event, [() => tracerouteWindow], 'traceroute:stop');
         tracerouteRunning = false;
         if (tracerouteProcess) {
             tracerouteProcess.kill();
@@ -220,12 +238,14 @@ function registerTracerouteHandlers(context) {
     /** ICMP 探测：使用 ping 命令 */
     function probeIcmp(ip, timeout) {
         return new Promise((resolve) => {
-            const isWin = process.platform === 'win32';
-            const cmd = isWin
-                ? `ping -n 1 -w ${timeout} ${ip}`
-                : `ping -c 1 -W ${Math.ceil(timeout / 1000)} ${ip}`;
+            const { command, args } = buildPingInvocation(ip, timeout);
             const start = Date.now();
-            exec(cmd, { timeout: timeout + 1500, windowsHide: true }, (err, stdout) => {
+            execFile(command, args, {
+                timeout: timeout + 1500,
+                windowsHide: true,
+                shell: false,
+                maxBuffer: 1024 * 1024
+            }, (err, stdout) => {
                 if (err && !stdout) return resolve(null);
                 const m = stdout && stdout.match(/[时间|time][=<](\d+\.?\d*)\s*ms/i);
                 const ok = stdout && /TTL=|ttl=|字节=|bytes from/i.test(stdout);
@@ -324,7 +344,7 @@ function registerTracerouteHandlers(context) {
                 args.push(host);
             }
 
-            const proc = spawn(cmd, args, { windowsHide: true });
+            const proc = spawn(cmd, args, { windowsHide: true, shell: false });
             trippyDiscoveryProc = proc;
             const hops = [];
             let buffer = '';
@@ -383,6 +403,17 @@ function registerTracerouteHandlers(context) {
 
     /** 启动 Trippy 连续探测 */
     ipcMain.handle('traceroute:trippy-start', async (event, opts) => {
+        assertIpcSender(event, [() => tracerouteWindow], 'traceroute:trippy-start');
+        requirePlainObject(opts);
+        const protocol = ['icmp', 'tcp', 'udp'].includes(opts.protocol) ? opts.protocol : 'icmp';
+        opts = {
+            host: normalizeHost(opts.host),
+            maxHops: requireInteger(opts.maxHops ?? 30, '最大跳数', 1, 64),
+            timeout: requireInteger(opts.timeout ?? 3000, '超时时间', 100, 60000),
+            interval: requireInteger(opts.interval ?? 1000, '探测间隔', 100, 60000),
+            protocol,
+            port: requireInteger(opts.port ?? 80, '端口', 1, 65535)
+        };
         if (trippyRunning) {
             return { success: false, error: '已有正在运行的 Trippy 探测' };
         }
@@ -454,7 +485,8 @@ function registerTracerouteHandlers(context) {
     });
 
     /** 停止 Trippy 探测 */
-    ipcMain.handle('traceroute:trippy-stop', () => {
+    ipcMain.handle('traceroute:trippy-stop', (event) => {
+        assertIpcSender(event, [() => tracerouteWindow], 'traceroute:trippy-stop');
         trippyRunning = false;
         if (trippyTimer) {
             clearTimeout(trippyTimer);
@@ -470,6 +502,9 @@ function registerTracerouteHandlers(context) {
 
     /** GeoIP / ASN 查询（使用 ip-api.com 免费接口） */
     ipcMain.handle('traceroute:lookup-geoip', async (event, ip) => {
+        assertIpcSender(event, [() => tracerouteWindow], 'traceroute:lookup-geoip');
+        ip = normalizeHost(ip, 'IP 地址');
+        if (!net.isIP(ip)) return null;
         if (!ip) return null;
         if (geoipCache.has(ip)) return geoipCache.get(ip);
         // 私有地址不查询

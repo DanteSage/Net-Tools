@@ -717,7 +717,7 @@
 
                 <div class="form-row">
                     <div class="checkbox-group">
-                        <input type="checkbox" id="server-writable" checked>
+                        <input type="checkbox" id="server-writable">
                         <span class="form-label" style="cursor: pointer;" onclick="document.getElementById('server-writable').click()">允许客户端上传写入 (WRQ)</span>
                     </div>
                 </div>
@@ -888,23 +888,19 @@
 
         let isRunning = false;
 
-        // 设置默认路径
-        const defaultDir = os.homedir();
-        dirInput.value = defaultDir;
-
         // 初始化可用网卡接口
         function initNetworkInterfaces() {
             const interfaces = os.networkInterfaces();
             ipSelect.innerHTML = '';
 
-            const optAll = document.createElement('option');
-            optAll.value = '0.0.0.0';
-            optAll.textContent = '0.0.0.0 (所有本地网卡)';
-            ipSelect.appendChild(optAll);
+            const optLoopback = document.createElement('option');
+            optLoopback.value = '127.0.0.1';
+            optLoopback.textContent = '127.0.0.1 (仅本机)';
+            ipSelect.appendChild(optLoopback);
 
             for (const name of Object.keys(interfaces)) {
                 for (const netInfo of interfaces[name]) {
-                    if (netInfo.family === 'IPv4') {
+                    if (netInfo.family === 'IPv4' && netInfo.address !== '127.0.0.1') {
                         const opt = document.createElement('option');
                         opt.value = netInfo.address;
                         opt.textContent = `${netInfo.address} - ${name}`;
@@ -912,6 +908,11 @@
                     }
                 }
             }
+
+            const optAll = document.createElement('option');
+            optAll.value = '0.0.0.0';
+            optAll.textContent = '0.0.0.0 (所有本地网卡)';
+            ipSelect.appendChild(optAll);
         }
 
         // 格式化文件大小
@@ -1118,6 +1119,13 @@
                 showToast('配置的共享根目录在本地不存在', 'error');
                 return;
             }
+            const exposeAllInterfaces = ipSelect.value === '0.0.0.0';
+            if (exposeAllInterfaces && !window.confirm('监听全部网卡会向所在网络开放 TFTP 服务，确定继续吗？')) {
+                return;
+            }
+            if (writableCheck.checked && !window.confirm('开启写入后客户端可以向共享目录上传文件，确定继续吗？')) {
+                return;
+            }
 
             btnStart.disabled = true;
             btnStart.textContent = '启动中...';
@@ -1129,7 +1137,8 @@
                 writable: writableCheck.checked,
                 timeout: timeoutVal,
                 retries: retriesVal,
-                maxBlockSize: blocksizeVal
+                maxBlockSize: blocksizeVal,
+                exposeAllInterfaces
             };
 
             try {

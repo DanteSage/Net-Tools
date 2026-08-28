@@ -5,9 +5,12 @@ const path = require('path');
 const { ipcMain, dialog } = require('electron');
 const { createToolWindow } = require('../utils/toolWindow');
 const FtpServerBackend = require('./ftp-server-backend');
+const { assertIpcSender } = require('../utils/security');
+const { validateFtpServerConfig } = require('./server-config');
 
 let ftpServerWindow = null;
 let ftpServerInstance = null;
+let authorizedRootDirectory = null;
 
 /**
  * 注册 FTP 服务端工具相关 IPC 处理程序
@@ -16,7 +19,8 @@ function registerFtpServerHandlers(context) {
     const { getMainWindow } = context;
 
     // 打开 FTP 服务端独立窗口
-    ipcMain.handle('ftpServer:open', async () => {
+    ipcMain.handle('ftpServer:open', async (event) => {
+        assertIpcSender(event, [getMainWindow], 'ftpServer:open');
         if (ftpServerWindow && !ftpServerWindow.isDestroyed()) {
             ftpServerWindow.focus();
             return { success: true };
@@ -30,6 +34,7 @@ function registerFtpServerHandlers(context) {
 
         ftpServerWindow.on('closed', () => {
             ftpServerWindow = null;
+            authorizedRootDirectory = null;
             // 窗口关闭时自动停止服务器，释放资源和端口
             if (ftpServerInstance) {
                 ftpServerInstance.stop().catch(() => {});
@@ -41,7 +46,8 @@ function registerFtpServerHandlers(context) {
     });
 
     // 浏览并选择共享根目录
-    ipcMain.handle('ftpServer:selectDirectory', async () => {
+    ipcMain.handle('ftpServer:selectDirectory', async (event) => {
+        assertIpcSender(event, [() => ftpServerWindow], 'ftpServer:selectDirectory');
         if (!ftpServerWindow || ftpServerWindow.isDestroyed()) return null;
 
         const result = await dialog.showOpenDialog(ftpServerWindow, {
@@ -49,25 +55,26 @@ function registerFtpServerHandlers(context) {
         });
 
         if (!result.canceled && result.filePaths.length > 0) {
-            return result.filePaths[0];
+            authorizedRootDirectory = path.resolve(result.filePaths[0]);
+            return authorizedRootDirectory;
         }
         return null;
     });
 
     // 开启 FTP 服务器
     ipcMain.handle('ftpServer:start', async (event, config) => {
+        assertIpcSender(event, [() => ftpServerWindow], 'ftpServer:start');
         if (ftpServerInstance) {
             return { success: false, error: '服务器已在运行中' };
         }
 
         try {
+            const safeConfig = validateFtpServerConfig(config);
+            if (!authorizedRootDirectory || safeConfig.rootDirectory !== authorizedRootDirectory) {
+                return { success: false, error: '请通过目录选择器授权 FTP 根目录' };
+            }
             ftpServerInstance = new FtpServerBackend({
-                port: config.port,
-                host: config.host,
-                username: config.username,
-                password: config.password,
-                rootDirectory: config.rootDirectory,
-                timeout: config.timeout,
+                ...safeConfig,
                 onLog: (msg) => {
                     // 安全广播日志给渲染端
                     if (ftpServerWindow && !ftpServerWindow.isDestroyed()) {
@@ -87,7 +94,8 @@ function registerFtpServerHandlers(context) {
     });
 
     // 停止 FTP 服务器
-    ipcMain.handle('ftpServer:stop', async () => {
+    ipcMain.handle('ftpServer:stop', async (event) => {
+        assertIpcSender(event, [() => ftpServerWindow], 'ftpServer:stop');
         if (!ftpServerInstance) {
             return { success: true };
         }

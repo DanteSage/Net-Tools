@@ -6,17 +6,21 @@ const fs = require('fs');
 const { ipcMain, dialog } = require('electron');
 const { createToolWindow } = require('../utils/toolWindow');
 const TftpServerBackend = require('./tftp-server-backend');
+const { assertIpcSender } = require('../utils/security');
+const { validateTftpServerConfig } = require('./server-config');
 
 let tftpServerWindow = null;
 let tftpServerInstance = null;
 let forceClose = false;
+let authorizedRootDirectory = null;
 
 /**
  * 注册 TFTP 服务端工具相关 IPC 处理程序
  */
 function registerTftpServerHandlers(context) {
     // 监听渲染进程发来的确认关闭通知
-    ipcMain.on('tftpServer:confirm-close', () => {
+    ipcMain.on('tftpServer:confirm-close', (event) => {
+        assertIpcSender(event, [() => tftpServerWindow], 'tftpServer:confirm-close');
         forceClose = true;
         if (tftpServerWindow && !tftpServerWindow.isDestroyed()) {
             tftpServerWindow.close();
@@ -24,7 +28,8 @@ function registerTftpServerHandlers(context) {
     });
 
     // 打开 TFTP 服务端独立窗口
-    ipcMain.handle('tftpServer:open', async () => {
+    ipcMain.handle('tftpServer:open', async (event) => {
+        assertIpcSender(event, [context.getMainWindow], 'tftpServer:open');
         if (tftpServerWindow && !tftpServerWindow.isDestroyed()) {
             tftpServerWindow.focus();
             return { success: true };
@@ -46,6 +51,7 @@ function registerTftpServerHandlers(context) {
 
         tftpServerWindow.on('closed', () => {
             tftpServerWindow = null;
+            authorizedRootDirectory = null;
             // 窗口关闭时自动停止服务器，释放资源和端口
             if (tftpServerInstance) {
                 tftpServerInstance.stop().catch(() => {});
@@ -57,7 +63,8 @@ function registerTftpServerHandlers(context) {
     });
 
     // 浏览并选择共享根目录
-    ipcMain.handle('tftpServer:selectDirectory', async () => {
+    ipcMain.handle('tftpServer:selectDirectory', async (event) => {
+        assertIpcSender(event, [() => tftpServerWindow], 'tftpServer:selectDirectory');
         if (!tftpServerWindow || tftpServerWindow.isDestroyed()) return null;
 
         const result = await dialog.showOpenDialog(tftpServerWindow, {
@@ -65,7 +72,8 @@ function registerTftpServerHandlers(context) {
         });
 
         if (!result.canceled && result.filePaths.length > 0) {
-            return result.filePaths[0];
+            authorizedRootDirectory = path.resolve(result.filePaths[0]);
+            return authorizedRootDirectory;
         }
         return null;
     });
@@ -73,13 +81,16 @@ function registerTftpServerHandlers(context) {
     // 列出指定目录的文件列表 (用于前端共享目录浏览器)
     ipcMain.handle('tftpServer:listFiles', async (event, dirPath) => {
         try {
-            if (!dirPath || !fs.existsSync(dirPath)) return [];
-            const files = fs.readdirSync(dirPath);
+            assertIpcSender(event, [() => tftpServerWindow], 'tftpServer:listFiles');
+            const resolvedDirectory = path.resolve(String(dirPath || ''));
+            if (!authorizedRootDirectory || resolvedDirectory !== authorizedRootDirectory || !fs.existsSync(resolvedDirectory)) return [];
+            const files = fs.readdirSync(resolvedDirectory);
             const list = [];
             for (const file of files) {
-                const fullPath = path.join(dirPath, file);
+                const fullPath = path.join(resolvedDirectory, file);
                 try {
-                    const stat = fs.statSync(fullPath);
+                    const stat = fs.lstatSync(fullPath);
+                    if (stat.isSymbolicLink()) continue;
                     list.push({
                         name: file,
                         size: stat.size,
@@ -101,20 +112,17 @@ function registerTftpServerHandlers(context) {
 
     // 开启 TFTP 服务器
     ipcMain.handle('tftpServer:start', async (event, config) => {
+        assertIpcSender(event, [() => tftpServerWindow], 'tftpServer:start');
         if (tftpServerInstance) {
             return { success: false, error: '服务器已在运行中' };
         }
 
         try {
-            tftpServerInstance = new TftpServerBackend({
-                port: config.port,
-                host: config.host,
-                rootDirectory: config.rootDirectory,
-                writable: config.writable,
-                timeout: config.timeout,
-                retries: config.retries,
-                maxBlockSize: config.maxBlockSize
-            });
+            const safeConfig = validateTftpServerConfig(config);
+            if (!authorizedRootDirectory || safeConfig.rootDirectory !== authorizedRootDirectory) {
+                return { success: false, error: '请通过目录选择器授权 TFTP 根目录' };
+            }
+            tftpServerInstance = new TftpServerBackend(safeConfig);
 
             // 监听底层日志事件并推送到前端
             tftpServerInstance.on('log', (logObj) => {
@@ -143,7 +151,8 @@ function registerTftpServerHandlers(context) {
     });
 
     // 停止 TFTP 服务器
-    ipcMain.handle('tftpServer:stop', async () => {
+    ipcMain.handle('tftpServer:stop', async (event) => {
+        assertIpcSender(event, [() => tftpServerWindow], 'tftpServer:stop');
         if (!tftpServerInstance) {
             return { success: true };
         }

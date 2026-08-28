@@ -6,16 +6,16 @@
 const dgram = require('dgram');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
+const { resolveContainedPath } = require('../utils/security');
 const EventEmitter = require('events');
 
 class TftpServerBackend extends EventEmitter {
     constructor(options) {
         super();
         this.port = options.port || 69;
-        this.host = options.host || '0.0.0.0';
-        this.rootDirectory = options.rootDirectory || os.homedir();
-        this.writable = options.writable !== undefined ? options.writable : true; // 允许写入 (WRQ)
+        this.host = options.host || '127.0.0.1';
+        this.rootDirectory = options.rootDirectory;
+        this.writable = options.writable === true; // 写入必须显式开启
         this.timeout = (options.timeout || 3) * 1000; // 毫秒
         this.retries = options.retries || 5;
         this.maxBlockSize = options.maxBlockSize || 1468; // 适配 MTU
@@ -119,17 +119,14 @@ class TftpServerBackend extends EventEmitter {
             safeFilename = safeFilename.substring(1);
         }
 
-        // 标准化绝对物理路径
-        const resolvedPath = path.normalize(path.join(this.rootDirectory, safeFilename));
-        
-        // 校验路径是否以根目录路径开头
-        const relative = path.relative(this.rootDirectory, resolvedPath);
-        const isSafe = !relative.startsWith('..') && !path.isAbsolute(relative);
-        
-        return {
-            isSafe: (relative === '' || isSafe),
-            realPath: resolvedPath
-        };
+        try {
+            return {
+                isSafe: true,
+                realPath: resolveContainedPath(this.rootDirectory, safeFilename)
+            };
+        } catch (_) {
+            return { isSafe: false, realPath: this.rootDirectory };
+        }
     }
 
     /**

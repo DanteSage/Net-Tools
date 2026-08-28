@@ -6,6 +6,14 @@ const path = require('path');
 const net = require('net');
 const { ipcMain } = require('electron');
 const { createToolWindow } = require('../utils/toolWindow');
+const {
+    assertIpcSender,
+    normalizeHost,
+    requireInteger,
+    requirePlainObject,
+    requireString
+} = require('../utils/security');
+const { validateNetcatListenConfig } = require('./server-config');
 
 // ==================== 模块状态 ====================
 
@@ -190,13 +198,12 @@ function serverStart(port, host) {
             resolve({ success: false, error: err.message });
         });
 
-        const listenHost = host || '0.0.0.0';
-        server.listen(port, listenHost, () => {
+        server.listen(port, host, () => {
             serverInstance = server;
             const addr = server.address();
             sendToWindow('netcat:server-state', {
                 state: 'listening',
-                host: listenHost,
+                host,
                 port: addr && addr.port ? addr.port : port
             });
             resolve({ success: true, port: addr && addr.port ? addr.port : port });
@@ -305,8 +312,10 @@ function grabBanner(host, port, timeout, probe) {
  */
 function registerNetcatHandlers(context) {
     const { getMainWindow } = context;
+    const assertNetcatWindow = (event, channel) => assertIpcSender(event, [() => netcatWindow], channel);
 
-    ipcMain.handle('netcat:open', async () => {
+    ipcMain.handle('netcat:open', async (event) => {
+        assertIpcSender(event, [getMainWindow], 'netcat:open');
         if (netcatWindow && !netcatWindow.isDestroyed()) {
             netcatWindow.focus();
             return { success: true };
@@ -329,15 +338,27 @@ function registerNetcatHandlers(context) {
     });
 
     // ===== 客户端 =====
-    ipcMain.handle('netcat:client-connect', async (event, { host, port, timeout }) => {
+    ipcMain.handle('netcat:client-connect', async (event, request) => {
         try {
+            assertNetcatWindow(event, 'netcat:client-connect');
+            requirePlainObject(request);
+            const host = normalizeHost(request.host);
+            const port = requireInteger(request.port, '端口', 1, 65535);
+            const timeout = requireInteger(request.timeout, '超时时间', 100, 60000);
             return await clientConnect(host, port, timeout);
         } catch (e) {
             return { success: false, error: e.message };
         }
     });
 
-    ipcMain.handle('netcat:client-send', async (event, { data, format, appendNewline }) => {
+    ipcMain.handle('netcat:client-send', async (event, request) => {
+        assertNetcatWindow(event, 'netcat:client-send');
+        requirePlainObject(request);
+        const { data, format, appendNewline } = request;
+        if (!['text', 'hex'].includes(format) || typeof appendNewline !== 'boolean' ||
+            typeof data !== 'string' || Buffer.byteLength(data) > 1024 * 1024) {
+            return { success: false, error: '发送参数不合法或数据超过 1 MB' };
+        }
         if (!clientSocket || clientSocket.destroyed) {
             return { success: false, error: '尚未连接' };
         }
@@ -350,7 +371,8 @@ function registerNetcatHandlers(context) {
         }
     });
 
-    ipcMain.handle('netcat:client-disconnect', async () => {
+    ipcMain.handle('netcat:client-disconnect', async (event) => {
+        assertNetcatWindow(event, 'netcat:client-disconnect');
         if (clientSocket) {
             try { clientSocket.destroy(); } catch (_) {}
             clientSocket = null;
@@ -359,23 +381,34 @@ function registerNetcatHandlers(context) {
     });
 
     // ===== 服务端 =====
-    ipcMain.handle('netcat:server-start', async (event, { port, host }) => {
+    ipcMain.handle('netcat:server-start', async (event, request) => {
         try {
-            return await serverStart(port, host);
+            assertNetcatWindow(event, 'netcat:server-start');
+            const config = validateNetcatListenConfig(request);
+            return await serverStart(config.port, config.host);
         } catch (e) {
             return { success: false, error: e.message };
         }
     });
 
-    ipcMain.handle('netcat:server-stop', async () => {
+    ipcMain.handle('netcat:server-stop', async (event) => {
         try {
+            assertNetcatWindow(event, 'netcat:server-stop');
             return await serverStop();
         } catch (e) {
             return { success: false, error: e.message };
         }
     });
 
-    ipcMain.handle('netcat:server-send', async (event, { id, data, format, appendNewline }) => {
+    ipcMain.handle('netcat:server-send', async (event, request) => {
+        assertNetcatWindow(event, 'netcat:server-send');
+        requirePlainObject(request);
+        const id = requireInteger(request.id, '客户端编号', 1, Number.MAX_SAFE_INTEGER);
+        const { data, format, appendNewline } = request;
+        if (!['text', 'hex'].includes(format) || typeof appendNewline !== 'boolean' ||
+            typeof data !== 'string' || Buffer.byteLength(data) > 1024 * 1024) {
+            return { success: false, error: '发送参数不合法或数据超过 1 MB' };
+        }
         const sock = serverClients.get(id);
         if (!sock || sock.destroyed) {
             return { success: false, error: '客户端已断开' };
@@ -389,7 +422,10 @@ function registerNetcatHandlers(context) {
         }
     });
 
-    ipcMain.handle('netcat:server-kick', async (event, { id }) => {
+    ipcMain.handle('netcat:server-kick', async (event, request) => {
+        assertNetcatWindow(event, 'netcat:server-kick');
+        requirePlainObject(request);
+        const id = requireInteger(request.id, '客户端编号', 1, Number.MAX_SAFE_INTEGER);
         const sock = serverClients.get(id);
         if (sock) {
             try { sock.destroy(); } catch (_) {}
@@ -398,9 +434,26 @@ function registerNetcatHandlers(context) {
     });
 
     // ===== Banner 抓取 =====
-    ipcMain.handle('netcat:banner-grab', async (event, { targets, timeout, concurrency, probe }) => {
+    ipcMain.handle('netcat:banner-grab', async (event, request) => {
+        assertNetcatWindow(event, 'netcat:banner-grab');
+        requirePlainObject(request);
+        if (!Array.isArray(request.targets) || request.targets.length > 1000) {
+            return { success: false, error: '目标数量不能超过 1000 个' };
+        }
+        const targets = request.targets.map(target => {
+            requirePlainObject(target, 'Banner 目标');
+            return {
+                host: normalizeHost(target.host),
+                port: requireInteger(target.port, '端口', 1, 65535)
+            };
+        });
+        const timeout = requireInteger(request.timeout ?? 3000, '超时时间', 100, 60000);
+        const concurrency = requireInteger(request.concurrency ?? 20, '并发数', 1, 100);
+        const probe = request.probe == null || request.probe === ''
+            ? ''
+            : requireString(request.probe, '探测内容', { maxLength: 4096 });
         bannerCancelled = false;
-        const list = Array.isArray(targets) ? targets : [];
+        const list = targets;
         const results = [];
         const total = list.length;
         const cc = Math.max(1, Math.min(concurrency || 20, 100));
@@ -422,7 +475,8 @@ function registerNetcatHandlers(context) {
         return { success: true, results, cancelled: bannerCancelled };
     });
 
-    ipcMain.handle('netcat:banner-stop', async () => {
+    ipcMain.handle('netcat:banner-stop', async (event) => {
+        assertNetcatWindow(event, 'netcat:banner-stop');
         bannerCancelled = true;
         return { success: true };
     });

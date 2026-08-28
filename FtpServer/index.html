@@ -412,7 +412,7 @@
                 <div class="form-group">
                     <span class="form-label"><span class="required-star">*</span>用户名</span>
                     <div class="form-input-wrapper">
-                        <input type="text" id="server-username" class="form-control" placeholder="请输入用户名" value="anonymous">
+                        <input type="text" id="server-username" class="form-control" placeholder="请输入用户名">
                     </div>
                 </div>
                 <div class="form-group">
@@ -469,25 +469,19 @@
         const btnStop = document.getElementById('btn-stop');
         const logConsole = document.getElementById('log-console');
 
-        // Initial default directory setting (Home directory)
-        const defaultDir = os.homedir();
-        dirInput.value = defaultDir;
-
         // Auto populate IP Interfaces
         function initNetworkInterfaces() {
             const interfaces = os.networkInterfaces();
             ipSelect.innerHTML = '';
 
-            // Listen on all addresses by default
-            const optAll = document.createElement('option');
-            optAll.value = '0.0.0.0';
-            optAll.textContent = '0.0.0.0 (所有本地网卡)';
-            ipSelect.appendChild(optAll);
+            const optLoopback = document.createElement('option');
+            optLoopback.value = '127.0.0.1';
+            optLoopback.textContent = '127.0.0.1 (仅本机)';
+            ipSelect.appendChild(optLoopback);
 
             for (const name of Object.keys(interfaces)) {
                 for (const netInfo of interfaces[name]) {
-                    // Only IPv4
-                    if (netInfo.family === 'IPv4') {
+                    if (netInfo.family === 'IPv4' && netInfo.address !== '127.0.0.1') {
                         const opt = document.createElement('option');
                         opt.value = netInfo.address;
                         opt.textContent = `${netInfo.address} - ${name}`;
@@ -495,6 +489,11 @@
                     }
                 }
             }
+
+            const optAll = document.createElement('option');
+            optAll.value = '0.0.0.0';
+            optAll.textContent = '0.0.0.0 (所有本地网卡)';
+            ipSelect.appendChild(optAll);
         }
 
         // Toasts alert
@@ -596,6 +595,14 @@
                 showToast('所选主目录路径在本地盘符中不存在', 'error');
                 return;
             }
+            const exposeAllInterfaces = ipSelect.value === '0.0.0.0';
+            if (exposeAllInterfaces && !window.confirm('监听全部网卡会向所在网络开放 FTP 服务，确定继续吗？')) {
+                return;
+            }
+            const allowAnonymous = userVal.toLowerCase() === 'anonymous';
+            if (allowAnonymous && !window.confirm('匿名 FTP 账户会降低访问控制强度，确定继续吗？')) {
+                return;
+            }
 
             // Disable UI, set loading
             btnStart.disabled = true;
@@ -607,7 +614,9 @@
                 host: ipSelect.value,
                 username: userVal,
                 password: passVal,
-                rootDirectory: dirVal
+                rootDirectory: dirVal,
+                exposeAllInterfaces,
+                allowAnonymous
             };
 
             const res = await ipcRenderer.invoke('ftpServer:start', config);

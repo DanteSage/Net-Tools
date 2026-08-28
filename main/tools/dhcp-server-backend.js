@@ -20,7 +20,7 @@ function getFirstActiveIp() {
 class DhcpServerBackend extends EventEmitter {
     constructor(options) {
         super();
-        this.interfaceIp = options.interfaceIp || '0.0.0.0'; // 绑定网卡 IP
+        this.interfaceIp = options.interfaceIp;              // 必须由用户明确选择网卡 IP
         this.startIp = options.startIp;                     // 起始分配 IP
         this.endIp = options.endIp;                         // 结束分配 IP
         this.subnetMask = options.subnetMask || '255.255.255.0';

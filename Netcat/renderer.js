@@ -276,16 +276,20 @@ function renderServerClients() {
 }
 
 serverListenBtn.addEventListener('click', async () => {
-    const host = $('server-host').value.trim() || '0.0.0.0';
+    const host = $('server-host').value.trim() || '127.0.0.1';
     const port = parseInt($('server-port').value, 10);
     if (!port) {
         appendLog(serverLog, 'err', '请填写端口');
         return;
     }
+    const exposeAllInterfaces = host === '0.0.0.0';
+    if (exposeAllInterfaces && !window.confirm('监听全部网卡会向所在网络开放此端口，确定继续吗？')) {
+        return;
+    }
     serverListenBtn.disabled = true;
     appendLog(serverLog, 'sys', `开始在 ${host}:${port} 监听...`);
     try {
-        const r = await ipcRenderer.invoke('netcat:server-start', { host, port });
+        const r = await ipcRenderer.invoke('netcat:server-start', { host, port, exposeAllInterfaces });
         if (!r || !r.success) {
             appendLog(serverLog, 'err', '监听失败：' + (r && r.error));
             serverListenBtn.disabled = false;

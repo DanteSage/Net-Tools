@@ -5,15 +5,15 @@
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
+const { resolveContainedPath } = require('../utils/security');
 
 class FtpServerBackend {
     constructor(options) {
         this.port = options.port || 21;
-        this.host = options.host || '0.0.0.0';
-        this.username = options.username || 'anonymous';
-        this.password = options.password || '';
-        this.rootDirectory = options.rootDirectory || os.homedir();
+        this.host = options.host || '127.0.0.1';
+        this.username = options.username;
+        this.password = options.password;
+        this.rootDirectory = options.rootDirectory;
         this.timeout = (options.timeout || 300) * 1000; // 毫秒
         this.onLog = options.onLog || (() => {});
         this.server = null;
@@ -160,13 +160,14 @@ class FtpServerBackend {
         }
 
         const resolvedVirtualPath = '/' + stack.join('/');
-        const realPath = path.join(this.rootDirectory, resolvedVirtualPath);
-
-        // 二重安全审计：验证最终解析物理路径是否仍在用户主目录下
-        const relative = path.relative(this.rootDirectory, realPath);
-        const isSafe = !relative.startsWith('..') && !path.isAbsolute(relative);
-        const safeRealPath = (relative === '' || isSafe) ? realPath : this.rootDirectory;
-        const safeVirtualPath = (relative === '' || isSafe) ? resolvedVirtualPath : '/';
+        let safeRealPath;
+        let safeVirtualPath = resolvedVirtualPath;
+        try {
+            safeRealPath = resolveContainedPath(this.rootDirectory, resolvedVirtualPath);
+        } catch (_) {
+            safeRealPath = this.rootDirectory;
+            safeVirtualPath = '/';
+        }
 
         return {
             virtualPath: safeVirtualPath,
@@ -436,7 +437,8 @@ class FtpServerBackend {
             for (const file of files) {
                 const fullPath = path.join(realPath, file);
                 try {
-                    const stat = fs.statSync(fullPath);
+                    const stat = fs.lstatSync(fullPath);
+                    if (stat.isSymbolicLink()) continue;
                     const isDir = stat.isDirectory();
                     const size = stat.size;
 

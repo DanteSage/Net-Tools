@@ -10,6 +10,14 @@ const {
     getOplogSaveMd, setOplogSaveMd,
     ensureDirectories 
 } = require('../config');
+const {
+    assertIpcSender,
+    requirePlainObject,
+    requireString,
+    resolveContainedFile
+} = require('../utils/security');
+
+const OPLOG_EXTENSIONS = ['.txt', '.md'];
 
 /**
  * 生成操作日志的 TXT 内容
@@ -133,10 +141,17 @@ function parseOplogMeta(content, filename, stat) {
  */
 function registerOplogHandlers(context) {
     const { getMainWindow } = context;
+    const assertMainWindow = (event, channel) => assertIpcSender(event, [getMainWindow], channel);
 
     // 保存操作记录
     ipcMain.handle('oplog:save', async (event, oplog) => {
         try {
+            assertMainWindow(event, 'oplog:save');
+            requirePlainObject(oplog, '操作日志');
+            requireString(String(oplog.deviceName ?? ''), '设备名称', { maxLength: 200 });
+            if (typeof oplog.content === 'string' && Buffer.byteLength(oplog.content, 'utf8') > 5 * 1024 * 1024) {
+                throw new Error('操作日志内容不能超过 5 MB');
+            }
             const oplogDir = getOplogDir();
             const safeDeviceName = String(oplog.deviceName).replace(/[<>:"\/\\|?*]/g, '_');
             const timestamp = new Date(oplog.startTime).toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -150,7 +165,7 @@ function registerOplogHandlers(context) {
                 content = generateOplogTxt(oplog);
             }
             
-            const filepath = path.join(oplogDir, filename);
+            const filepath = resolveContainedFile(oplogDir, filename, OPLOG_EXTENSIONS);
             fs.writeFileSync(filepath, content, 'utf8');
             
             return { success: true, filename };
@@ -160,8 +175,9 @@ function registerOplogHandlers(context) {
     });
 
     // 获取所有操作记录
-    ipcMain.handle('oplog:getAll', async () => {
+    ipcMain.handle('oplog:getAll', async (event) => {
         try {
+            assertMainWindow(event, 'oplog:getAll');
             const oplogDir = getOplogDir();
             if (!fs.existsSync(oplogDir)) {
                 return [];
@@ -169,7 +185,7 @@ function registerOplogHandlers(context) {
             const files = fs.readdirSync(oplogDir)
                 .filter(f => f.endsWith('.txt') || f.endsWith('.md'))
                 .map(f => {
-                    const filepath = path.join(oplogDir, f);
+                    const filepath = resolveContainedFile(oplogDir, f, OPLOG_EXTENSIONS);
                     const stat = fs.statSync(filepath);
                     const content = fs.readFileSync(filepath, 'utf8');
                     return parseOplogMeta(content, f, stat);
@@ -185,8 +201,9 @@ function registerOplogHandlers(context) {
     // 获取单个操作记录
     ipcMain.handle('oplog:get', async (event, id) => {
         try {
+            assertMainWindow(event, 'oplog:get');
             const oplogDir = getOplogDir();
-            const filepath = path.join(oplogDir, id);
+            const filepath = resolveContainedFile(oplogDir, id, OPLOG_EXTENSIONS);
             if (fs.existsSync(filepath)) {
                 const content = fs.readFileSync(filepath, 'utf8');
                 const stat = fs.statSync(filepath);
@@ -203,8 +220,9 @@ function registerOplogHandlers(context) {
     // 删除操作记录
     ipcMain.handle('oplog:delete', async (event, id) => {
         try {
+            assertMainWindow(event, 'oplog:delete');
             const oplogDir = getOplogDir();
-            const filepath = path.join(oplogDir, id);
+            const filepath = resolveContainedFile(oplogDir, id, OPLOG_EXTENSIONS);
             if (fs.existsSync(filepath)) {
                 fs.unlinkSync(filepath);
             }
@@ -215,14 +233,15 @@ function registerOplogHandlers(context) {
     });
 
     // 清空所有操作记录
-    ipcMain.handle('oplog:clearAll', async () => {
+    ipcMain.handle('oplog:clearAll', async (event) => {
         try {
+            assertMainWindow(event, 'oplog:clearAll');
             const oplogDir = getOplogDir();
             if (fs.existsSync(oplogDir)) {
                 const files = fs.readdirSync(oplogDir)
                     .filter(f => f.endsWith('.txt') || f.endsWith('.md'));
                 for (const f of files) {
-                    fs.unlinkSync(path.join(oplogDir, f));
+                    fs.unlinkSync(resolveContainedFile(oplogDir, f, OPLOG_EXTENSIONS));
                 }
             }
             return { success: true };
@@ -232,12 +251,14 @@ function registerOplogHandlers(context) {
     });
 
     // 获取操作日志目录
-    ipcMain.handle('oplog:getDir', async () => {
+    ipcMain.handle('oplog:getDir', async (event) => {
+        assertMainWindow(event, 'oplog:getDir');
         return getOplogDir();
     });
 
     // 获取操作日志设置
-    ipcMain.handle('oplog:getSettings', async () => {
+    ipcMain.handle('oplog:getSettings', async (event) => {
+        assertMainWindow(event, 'oplog:getSettings');
         return {
             dir: getOplogDir(),
             saveMd: getOplogSaveMd(),
@@ -247,6 +268,7 @@ function registerOplogHandlers(context) {
 
     // 设置操作日志目录
     ipcMain.handle('oplog:setDir', async (event, newDir) => {
+        assertMainWindow(event, 'oplog:setDir');
         if (!newDir) {
             setOplogDir(paths.defaultOplog);
             saveSettings({ oplogDir: paths.defaultOplog });
@@ -254,20 +276,12 @@ function registerOplogHandlers(context) {
             return { success: true, path: getOplogDir() };
         }
         
-        try {
-            if (!fs.existsSync(newDir)) {
-                fs.mkdirSync(newDir, { recursive: true });
-            }
-            setOplogDir(newDir);
-            saveSettings({ oplogDir: newDir });
-            return { success: true, path: getOplogDir() };
-        } catch (e) {
-            return { success: false, error: e.message };
-        }
+        return { success: false, error: '请通过目录选择器设置操作日志目录' };
     });
 
     // 选择操作日志目录
-    ipcMain.handle('oplog:selectDir', async () => {
+    ipcMain.handle('oplog:selectDir', async (event) => {
+        assertMainWindow(event, 'oplog:selectDir');
         const mainWindow = getMainWindow();
         const result = await dialog.showOpenDialog(mainWindow, {
             properties: ['openDirectory', 'createDirectory'],
@@ -286,13 +300,15 @@ function registerOplogHandlers(context) {
 
     // 设置是否保存 MD 格式
     ipcMain.handle('oplog:setSaveMd', async (event, enabled) => {
+        assertMainWindow(event, 'oplog:setSaveMd');
         setOplogSaveMd(!!enabled);
         saveSettings({ oplogSaveMd: getOplogSaveMd() });
         return { success: true, saveMd: getOplogSaveMd() };
     });
 
     // 打开操作日志目录
-    ipcMain.handle('oplog:openDir', async () => {
+    ipcMain.handle('oplog:openDir', async (event) => {
+        assertMainWindow(event, 'oplog:openDir');
         return shell.openPath(getOplogDir());
     });
 }

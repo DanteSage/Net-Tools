@@ -817,14 +817,9 @@
             const interfaces = os.networkInterfaces();
             interfaceSelect.innerHTML = '';
 
-            const optAll = document.createElement('option');
-            optAll.value = '0.0.0.0';
-            optAll.textContent = '0.0.0.0 (侦听所有网卡)';
-            interfaceSelect.appendChild(optAll);
-
             for (const name of Object.keys(interfaces)) {
                 for (const netInfo of interfaces[name]) {
-                    if (netInfo.family === 'IPv4') {
+                    if (netInfo.family === 'IPv4' && !netInfo.internal) {
                         const opt = document.createElement('option');
                         opt.value = netInfo.address;
                         opt.textContent = `${netInfo.address} - ${name}`;
@@ -832,12 +827,18 @@
                     }
                 }
             }
+            if (!interfaceSelect.options.length) {
+                const unavailable = document.createElement('option');
+                unavailable.value = '';
+                unavailable.textContent = '未发现可用的 IPv4 网卡';
+                interfaceSelect.appendChild(unavailable);
+            }
         }
 
         // Auto-configure start/end IP placeholder or values based on net interface selection
         function handleInterfaceChange() {
             const selectedIp = interfaceSelect.value;
-            if (selectedIp === '0.0.0.0') {
+            if (!selectedIp) {
                 startIpInput.value = '';
                 endIpInput.value = '';
                 gatewayInput.value = '';
@@ -1033,6 +1034,10 @@
 
         // Start service
         btnStart.addEventListener('click', async () => {
+            if (!interfaceSelect.value) {
+                showToast('请先选择可用的 IPv4 网卡', 'error');
+                return;
+            }
             const startIp = startIpInput.value.trim();
             const endIp = endIpInput.value.trim();
             const mask = maskInput.value.trim();
